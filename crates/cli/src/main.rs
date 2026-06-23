@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use code_count_core::{LanguageStat, ScanOptions, ScanReport, ScanSummary, scan_path};
 
 #[derive(Debug, Parser)]
@@ -10,6 +10,9 @@ use code_count_core::{LanguageStat, ScanOptions, ScanReport, ScanSummary, scan_p
 struct Cli {
     #[arg(default_value = ".")]
     path: PathBuf,
+
+    #[command(subcommand)]
+    command: Option<Command>,
 
     #[arg(long)]
     json: bool,
@@ -24,16 +27,28 @@ struct Cli {
     ignore_comments: bool,
 }
 
+#[derive(Debug, Subcommand)]
+enum Command {
+    Tui {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    if !cli.path.exists() {
-        bail!("path does not exist: {}", cli.path.display());
-    }
-
     let options = ScanOptions {
         include_blank_lines: !cli.ignore_blank,
         include_comments: !cli.ignore_comments,
     };
+
+    if let Some(Command::Tui { path }) = cli.command {
+        ensure_path_exists(&path)?;
+        let report = scan_path(path, &options);
+        return code_count_tui::run(report, options);
+    }
+
+    ensure_path_exists(&cli.path)?;
     let report = scan_path(&cli.path, &options);
 
     if cli.json {
@@ -44,6 +59,14 @@ fn main() -> Result<()> {
         print_languages(&report);
     } else {
         print_summary(&report.summary);
+    }
+
+    Ok(())
+}
+
+fn ensure_path_exists(path: &Path) -> Result<()> {
+    if !path.exists() {
+        bail!("path does not exist: {}", path.display());
     }
 
     Ok(())

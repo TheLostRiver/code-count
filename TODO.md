@@ -42,13 +42,13 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 3: TUI Foundation
 
-- [ ] Add a TUI crate or module using `ratatui` and `crossterm`.
-- [ ] Prefer a unified command shape: `code-count tui .`.
-- [ ] Define app state that owns the current `ScanReport`.
-- [ ] Define `AppView` with `Dashboard`, `Explorer`, and `Report`.
-- [ ] Support `q` to quit.
-- [ ] Support `r` to rescan.
-- [ ] Support `Tab` and `1`/`2`/`3` to switch views.
+- [x] Add a TUI crate or module using `ratatui` and `crossterm`.
+- [x] Prefer a unified command shape: `code-count tui .`.
+- [x] Define app state that owns the current `ScanReport`.
+- [x] Define `AppView` with `Dashboard`, `Explorer`, and `Report`.
+- [x] Support `q` to quit.
+- [x] Support `r` to rescan.
+- [x] Support `Tab` and `1`/`2`/`3` to switch views.
 
 ## Milestone 4: Dashboard View v0.1
 
