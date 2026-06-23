@@ -1,2 +1,6 @@
 /target
 .superpowers/
+.codex/hooks/
+.codex/hooks.json
+.codex/skills/planning-with-files/
+.codex/skills/pwf-*/
