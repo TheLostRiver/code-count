@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 use code_count_core::{FileStat, LanguageStat, ScanOptions, ScanReport, scan_path};
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     Terminal,
     buffer::Buffer,
@@ -248,13 +248,20 @@ where
         terminal.draw(|frame| draw(frame.area(), frame.buffer_mut(), &state))?;
 
         if let Event::Key(key) = event::read()?
-            && handle_key(&mut state, key.code, &options)
+            && handle_key_event(&mut state, key, &options)
         {
             break;
         }
     }
 
     Ok(())
+}
+
+fn handle_key_event(state: &mut AppState, key: KeyEvent, options: &ScanOptions) -> bool {
+    match key.kind {
+        KeyEventKind::Press | KeyEventKind::Repeat => handle_key(state, key.code, options),
+        KeyEventKind::Release => false,
+    }
 }
 
 fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) -> bool {
@@ -1115,6 +1122,56 @@ mod tests {
         assert_eq!(
             state.selected_language().expect("selected language").name,
             first_language
+        );
+    }
+
+    #[test]
+    fn explorer_ignores_key_release_when_selecting_languages() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        fs::write(temp_dir.path().join("script.py"), "print('hello')\n")
+            .expect("write python file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+        assert_eq!(state.filtered_languages().len(), 3);
+
+        let first_language = state
+            .selected_language()
+            .expect("initial selected language")
+            .name
+            .clone();
+
+        crate::handle_key_event(
+            &mut state,
+            crossterm::event::KeyEvent::new_with_kind(
+                crossterm::event::KeyCode::Down,
+                crossterm::event::KeyModifiers::NONE,
+                crossterm::event::KeyEventKind::Press,
+            ),
+            &ScanOptions::default(),
+        );
+        let second_language = state
+            .selected_language()
+            .expect("second selected language")
+            .name
+            .clone();
+
+        crate::handle_key_event(
+            &mut state,
+            crossterm::event::KeyEvent::new_with_kind(
+                crossterm::event::KeyCode::Down,
+                crossterm::event::KeyModifiers::NONE,
+                crossterm::event::KeyEventKind::Release,
+            ),
+            &ScanOptions::default(),
+        );
+
+        assert_ne!(first_language, second_language);
+        assert_eq!(
+            state.selected_language().expect("selected language").name,
+            second_language
         );
     }
 
