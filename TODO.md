@@ -66,7 +66,7 @@ The first TUI milestone is Dashboard View.
 - [x] Show selected language details on the right.
 - [x] Support keyboard selection with up/down.
 - [x] Support `/` filtering.
-- [ ] Add per-file details after language details are stable.
+- [x] Add per-file details after language details are stable.
 
 ## Milestone 6: Report View
 

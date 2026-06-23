@@ -1,7 +1,10 @@
-use std::io::{self, IsTerminal};
+use std::{
+    io::{self, IsTerminal},
+    path::Path,
+};
 
 use anyhow::Result;
-use code_count_core::{LanguageStat, ScanOptions, ScanReport, scan_path};
+use code_count_core::{FileStat, LanguageStat, ScanOptions, ScanReport, scan_path};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     Terminal,
@@ -500,7 +503,7 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         "Code"
     };
 
-    vec![
+    let mut lines = vec![
         Line::from(language.name.clone()),
         Line::from(""),
         Line::from(format!("Category {}", category)),
@@ -510,7 +513,12 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         Line::from(format!("Comments {}", language.comment_lines)),
         Line::from(format!("Documents {}", language.document_lines)),
         Line::from(format!("Blank {}", language.blank_lines)),
-    ]
+        Line::from(""),
+        Line::from("Files"),
+    ];
+
+    lines.extend(file_detail_lines(language, &state.report.summary.root));
+    lines
 }
 
 fn language_visible_lines(language: &LanguageStat) -> usize {
@@ -519,6 +527,41 @@ fn language_visible_lines(language: &LanguageStat) -> usize {
     } else {
         language.code_lines
     }
+}
+
+fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>> {
+    const MAX_FILES: usize = 8;
+    let mut lines = Vec::new();
+
+    for file_stat in language.file_stats.iter().take(MAX_FILES) {
+        lines.push(Line::from(format_file_stat(file_stat, root)));
+    }
+
+    let remaining = language.file_stats.len().saturating_sub(MAX_FILES);
+    if remaining > 0 {
+        lines.push(Line::from(format!("... {} more files", remaining)));
+    }
+
+    if lines.is_empty() {
+        lines.push(Line::from("No files found"));
+    }
+
+    lines
+}
+
+fn format_file_stat(file_stat: &FileStat, root: &Path) -> String {
+    let path = display_path(&file_stat.path, root);
+    format!(
+        "{:<28} total {:>5} code {:>5}",
+        path, file_stat.total_lines, file_stat.code_lines
+    )
+}
+
+fn display_path(path: &Path, root: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 fn composition_bar(code: usize, documents: usize, comments: usize, blanks: usize) -> String {
@@ -687,6 +730,32 @@ mod tests {
         assert!(output.contains("Markdown"));
         assert!(output.contains("Files"));
         assert!(output.contains("Category"));
+    }
+
+    #[test]
+    fn explorer_details_include_files_for_selected_language() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("main.rs"),
+            "fn main() {\n    // greet\n\n    println!(\"hello\");\n}\n",
+        )
+        .expect("write main rust file");
+        fs::write(
+            temp_dir.path().join("lib.rs"),
+            "pub fn answer() -> usize {\n    42\n}\n",
+        )
+        .expect("write lib rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        let output = crate::render_to_text(&state, 96, 32);
+
+        assert!(output.contains("Files"));
+        assert!(output.contains("main.rs"));
+        assert!(output.contains("lib.rs"));
+        assert!(output.contains("Total"));
+        assert!(output.contains("Code"));
     }
 
     #[test]

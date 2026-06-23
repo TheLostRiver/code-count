@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tokei::{Config, LanguageType, Languages};
+use tokei::{Config, LanguageType, Languages, Report};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanOptions {
@@ -38,6 +38,16 @@ pub struct LineCategories {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileStat {
+    pub path: PathBuf,
+    pub total_lines: usize,
+    pub blank_lines: usize,
+    pub comment_lines: usize,
+    pub document_lines: usize,
+    pub code_lines: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LanguageStat {
     pub name: String,
     pub files: usize,
@@ -47,6 +57,7 @@ pub struct LanguageStat {
     pub document_lines: usize,
     pub code_lines: usize,
     pub is_document: bool,
+    pub file_stats: Vec<FileStat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +102,18 @@ pub fn scan_path(root: impl AsRef<Path>, options: &ScanOptions) -> ScanReport {
         };
         let code_lines = if is_document { 0 } else { language.code };
         let comment_lines = if is_document { 0 } else { language.comments };
+        let mut file_stats = language
+            .reports
+            .iter()
+            .map(|report| file_stat_from_report(report, is_document, options))
+            .collect::<Vec<_>>();
+        file_stats.sort_by(|left, right| {
+            right
+                .total_lines
+                .cmp(&left.total_lines)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+
         let language_stat = LanguageStat {
             name: language_type.name().to_owned(),
             files: language.reports.len(),
@@ -108,6 +131,7 @@ pub fn scan_path(root: impl AsRef<Path>, options: &ScanOptions) -> ScanReport {
             document_lines,
             code_lines,
             is_document,
+            file_stats,
         };
 
         summary.files += language.reports.len();
@@ -168,6 +192,38 @@ pub fn scan_path(root: impl AsRef<Path>, options: &ScanOptions) -> ScanReport {
 fn is_document_language(language_type: LanguageType) -> bool {
     language_type.is_literate()
         || matches!(language_type, LanguageType::Markdown | LanguageType::Text)
+}
+
+fn file_stat_from_report(report: &Report, is_document: bool, options: &ScanOptions) -> FileStat {
+    let document_lines = if is_document {
+        report.stats.code + report.stats.comments
+    } else {
+        0
+    };
+    let code_lines = if is_document { 0 } else { report.stats.code };
+    let comment_lines = if is_document {
+        0
+    } else {
+        report.stats.comments
+    };
+    let blank_lines = if options.include_blank_lines {
+        report.stats.blanks
+    } else {
+        0
+    };
+
+    FileStat {
+        path: report.name.clone(),
+        total_lines: report.stats.lines(),
+        blank_lines,
+        comment_lines: if options.include_comments {
+            comment_lines
+        } else {
+            0
+        },
+        document_lines,
+        code_lines,
+    }
 }
 
 #[cfg(test)]
@@ -253,5 +309,56 @@ mod tests {
         assert_eq!(markdown.comment_lines, 0);
         assert_eq!(markdown.document_lines, 2);
         assert!(markdown.is_document);
+    }
+
+    #[test]
+    fn scan_report_includes_file_stats_per_language() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("main.rs"),
+            "fn main() {\n    // greet\n\n    println!(\"hello\");\n}\n",
+        )
+        .expect("write main rust file");
+        fs::write(
+            temp_dir.path().join("lib.rs"),
+            "pub fn answer() -> usize {\n    42\n}\n",
+        )
+        .expect("write lib rust file");
+        fs::write(
+            temp_dir.path().join("README.md"),
+            "# Title\n\nSome project notes.\n",
+        )
+        .expect("write markdown file");
+
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+
+        let rust = report
+            .languages
+            .iter()
+            .find(|language| language.name == "Rust")
+            .expect("Rust language stat");
+        assert_eq!(rust.file_stats.len(), 2);
+        assert_eq!(rust.file_stats[0].path, temp_dir.path().join("main.rs"));
+        assert_eq!(rust.file_stats[0].total_lines, 5);
+        assert_eq!(rust.file_stats[0].code_lines, 3);
+        assert_eq!(rust.file_stats[0].comment_lines, 1);
+        assert_eq!(rust.file_stats[0].document_lines, 0);
+        assert_eq!(rust.file_stats[0].blank_lines, 1);
+
+        let markdown = report
+            .languages
+            .iter()
+            .find(|language| language.name == "Markdown")
+            .expect("Markdown language stat");
+        assert_eq!(markdown.file_stats.len(), 1);
+        assert_eq!(
+            markdown.file_stats[0].path,
+            temp_dir.path().join("README.md")
+        );
+        assert_eq!(markdown.file_stats[0].total_lines, 3);
+        assert_eq!(markdown.file_stats[0].code_lines, 0);
+        assert_eq!(markdown.file_stats[0].comment_lines, 0);
+        assert_eq!(markdown.file_stats[0].document_lines, 2);
+        assert_eq!(markdown.file_stats[0].blank_lines, 1);
     }
 }
