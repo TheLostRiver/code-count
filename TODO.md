@@ -78,12 +78,12 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 7: Quality Gates
 
-- [ ] Run `cargo fmt --check`.
-- [ ] Run `cargo test`.
-- [ ] Run `cargo clippy`.
-- [ ] Manually test the CLI on Windows.
+- [x] Run `cargo fmt --check`.
+- [x] Run `cargo test`.
+- [x] Run `cargo clippy`.
+- [x] Manually test the CLI on Windows.
 - [ ] Manually test the TUI in Windows Terminal.
-- [ ] Add CI for Windows, macOS, and Linux when the CLI stabilizes.
+- [x] Add CI for Windows, macOS, and Linux when the CLI stabilizes.
 
 ## Later Ideas
 
