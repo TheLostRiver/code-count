@@ -1,5 +1,6 @@
 /target
 .superpowers/
+.planning/
 .codex/hooks/
 .codex/hooks.json
 .codex/skills/planning-with-files/
