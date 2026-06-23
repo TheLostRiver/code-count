@@ -25,13 +25,13 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 1: Core Report Model
 
-- [ ] Replace the summary-only model with a richer `ScanReport`.
-- [ ] Keep a top-level `summary` field for totals.
-- [ ] Add `languages: Vec<LanguageStat>`.
-- [ ] Add a category breakdown for code, comments, documents, and blanks.
-- [ ] Classify document-oriented file types such as Markdown and plain text.
-- [ ] Add tests for a mixed Rust and Markdown sample project.
-- [ ] Preserve JSON serialization for CLI and future UI consumers.
+- [x] Replace the summary-only model with a richer `ScanReport`.
+- [x] Keep a top-level `summary` field for totals.
+- [x] Add `languages: Vec<LanguageStat>`.
+- [x] Add a category breakdown for code, comments, documents, and blanks.
+- [x] Classify document-oriented file types such as Markdown and plain text.
+- [x] Add tests for a mixed Rust and Markdown sample project.
+- [x] Preserve JSON serialization for CLI and future UI consumers.
 
 ## Milestone 2: CLI Compatibility
 

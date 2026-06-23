@@ -27,16 +27,18 @@ fn main() -> Result<()> {
         include_blank_lines: !cli.ignore_blank,
         include_comments: !cli.ignore_comments,
     };
-    let summary = scan_path(&cli.path, &options);
+    let report = scan_path(&cli.path, &options);
 
     if cli.json {
-        println!("{}", serde_json::to_string_pretty(&summary)?);
+        println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
+        let summary = &report.summary;
         println!("Root: {}", summary.root.display());
         println!("Files: {}", summary.files);
         println!("Total lines: {}", summary.total_lines);
         println!("Code lines: {}", summary.code_lines);
         println!("Comment lines: {}", summary.comment_lines);
+        println!("Document lines: {}", summary.document_lines);
         println!("Blank lines: {}", summary.blank_lines);
     }
 
