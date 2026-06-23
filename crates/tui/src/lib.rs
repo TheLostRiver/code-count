@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal};
 
 use anyhow::Result;
-use code_count_core::{ScanOptions, ScanReport, scan_path};
+use code_count_core::{LanguageStat, ScanOptions, ScanReport, scan_path};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     Terminal,
@@ -23,6 +23,9 @@ pub enum AppView {
 pub struct AppState {
     report: ScanReport,
     current_view: AppView,
+    selected_language_index: usize,
+    language_filter: String,
+    editing_language_filter: bool,
 }
 
 impl AppState {
@@ -30,6 +33,9 @@ impl AppState {
         Self {
             report,
             current_view: AppView::Dashboard,
+            selected_language_index: 0,
+            language_filter: String::new(),
+            editing_language_filter: false,
         }
     }
 
@@ -56,6 +62,84 @@ impl AppState {
     pub fn rescan(&mut self, options: &ScanOptions) {
         let root = self.report.summary.root.clone();
         self.report = scan_path(root, options);
+        self.clamp_selected_language();
+    }
+
+    pub fn selected_language(&self) -> Option<&LanguageStat> {
+        self.filtered_languages()
+            .get(self.selected_language_index)
+            .copied()
+    }
+
+    pub fn filtered_languages(&self) -> Vec<&LanguageStat> {
+        if self.language_filter.is_empty() {
+            return self.report.languages.iter().collect();
+        }
+
+        let filter = self.language_filter.to_lowercase();
+        self.report
+            .languages
+            .iter()
+            .filter(|language| language.name.to_lowercase().contains(&filter))
+            .collect()
+    }
+
+    pub fn select_next_language(&mut self) {
+        let language_count = self.filtered_languages().len();
+        if language_count == 0 {
+            self.selected_language_index = 0;
+            return;
+        }
+
+        self.selected_language_index =
+            (self.selected_language_index + 1).min(language_count.saturating_sub(1));
+    }
+
+    pub fn select_previous_language(&mut self) {
+        self.selected_language_index = self.selected_language_index.saturating_sub(1);
+    }
+
+    pub fn set_language_filter(&mut self, filter: impl Into<String>) {
+        self.language_filter = filter.into();
+        self.selected_language_index = 0;
+    }
+
+    pub fn clear_language_filter(&mut self) {
+        self.language_filter.clear();
+        self.selected_language_index = 0;
+    }
+
+    fn start_language_filter(&mut self) {
+        self.editing_language_filter = true;
+    }
+
+    fn stop_language_filter(&mut self) {
+        self.editing_language_filter = false;
+    }
+
+    fn is_editing_language_filter(&self) -> bool {
+        self.editing_language_filter
+    }
+
+    fn push_language_filter_char(&mut self, value: char) {
+        self.language_filter.push(value);
+        self.selected_language_index = 0;
+    }
+
+    fn pop_language_filter_char(&mut self) {
+        self.language_filter.pop();
+        self.selected_language_index = 0;
+    }
+
+    fn clamp_selected_language(&mut self) {
+        let language_count = self.filtered_languages().len();
+        if language_count == 0 {
+            self.selected_language_index = 0;
+        } else {
+            self.selected_language_index = self
+                .selected_language_index
+                .min(language_count.saturating_sub(1));
+        }
     }
 }
 
@@ -83,20 +167,45 @@ where
     loop {
         terminal.draw(|frame| draw(frame.area(), frame.buffer_mut(), &state))?;
 
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Char('q') => break,
-                KeyCode::Char('r') => state.rescan(&options),
-                KeyCode::Tab => state.next_view(),
-                KeyCode::Char('1') => state.set_view(AppView::Dashboard),
-                KeyCode::Char('2') => state.set_view(AppView::Explorer),
-                KeyCode::Char('3') => state.set_view(AppView::Report),
-                _ => {}
-            }
+        if let Event::Key(key) = event::read()?
+            && handle_key(&mut state, key.code, &options)
+        {
+            break;
         }
     }
 
     Ok(())
+}
+
+fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) -> bool {
+    if state.is_editing_language_filter() {
+        match key_code {
+            KeyCode::Enter | KeyCode::Esc => state.stop_language_filter(),
+            KeyCode::Backspace => state.pop_language_filter_char(),
+            KeyCode::Char(value) => state.push_language_filter_char(value),
+            _ => {}
+        }
+        return false;
+    }
+
+    match key_code {
+        KeyCode::Char('q') => return true,
+        KeyCode::Char('r') => state.rescan(options),
+        KeyCode::Tab => state.next_view(),
+        KeyCode::Char('1') => state.set_view(AppView::Dashboard),
+        KeyCode::Char('2') => state.set_view(AppView::Explorer),
+        KeyCode::Char('3') => state.set_view(AppView::Report),
+        KeyCode::Up if state.current_view() == AppView::Explorer => {
+            state.select_previous_language()
+        }
+        KeyCode::Down if state.current_view() == AppView::Explorer => state.select_next_language(),
+        KeyCode::Char('/') if state.current_view() == AppView::Explorer => {
+            state.start_language_filter();
+        }
+        _ => {}
+    }
+
+    false
 }
 
 fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
@@ -119,12 +228,7 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
 
     match state.current_view {
         AppView::Dashboard => render_dashboard(chunks[1], buffer, state),
-        AppView::Explorer => render_placeholder(
-            chunks[1],
-            buffer,
-            "Explorer",
-            placeholder_lines("Explorer View", "Language and file browsing"),
-        ),
+        AppView::Explorer => render_explorer(chunks[1], buffer, state),
         AppView::Report => render_placeholder(
             chunks[1],
             buffer,
@@ -133,9 +237,8 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         ),
     }
 
-    let footer =
-        Paragraph::new("q quit | r rescan | Tab next view | 1 dashboard | 2 explorer | 3 report")
-            .block(Block::default().borders(Borders::ALL).title("Keys"));
+    let footer = Paragraph::new(footer_text(state))
+        .block(Block::default().borders(Borders::ALL).title("Keys"));
     footer.render(chunks[2], buffer);
 }
 
@@ -225,6 +328,48 @@ fn render_languages_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
         .render(area, buffer);
 }
 
+fn render_explorer(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    if area.width < 70 {
+        render_explorer_stacked(area, buffer, state);
+    } else {
+        render_explorer_wide(area, buffer, state);
+    }
+}
+
+fn render_explorer_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(area);
+
+    render_explorer_languages(columns[0], buffer, state);
+    render_explorer_details(columns[1], buffer, state);
+}
+
+fn render_explorer_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    render_explorer_languages(rows[0], buffer, state);
+    render_explorer_details(rows[1], buffer, state);
+}
+
+fn render_explorer_languages(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    Paragraph::new(explorer_language_lines(state))
+        .block(Block::default().borders(Borders::ALL).title("Languages"))
+        .wrap(Wrap { trim: true })
+        .render(area, buffer);
+}
+
+fn render_explorer_details(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    Paragraph::new(explorer_detail_lines(state))
+        .block(Block::default().borders(Borders::ALL).title("Details"))
+        .wrap(Wrap { trim: true })
+        .render(area, buffer);
+}
+
 fn render_placeholder(
     area: Rect,
     buffer: &mut Buffer,
@@ -306,6 +451,76 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
     lines
 }
 
+fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+
+    if state.language_filter.is_empty() {
+        lines.push(Line::from("Filter:"));
+    } else {
+        lines.push(Line::from(format!("Filter: {}", state.language_filter)));
+    }
+
+    lines.push(Line::from(""));
+
+    for (index, language) in state.filtered_languages().iter().enumerate() {
+        let selection = if index == state.selected_language_index {
+            ">"
+        } else {
+            " "
+        };
+        let category = if language.is_document { "doc" } else { "code" };
+
+        lines.push(Line::from(format!(
+            "{} {:<16} {:>6} {:>4}",
+            selection,
+            language.name,
+            language_visible_lines(language),
+            category
+        )));
+    }
+
+    if lines.len() == 2 {
+        lines.push(Line::from("No languages found"));
+    }
+
+    lines
+}
+
+fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
+    let Some(language) = state.selected_language() else {
+        return vec![
+            Line::from("No language selected"),
+            Line::from("Clear the filter to show all languages."),
+        ];
+    };
+
+    let category = if language.is_document {
+        "Documents"
+    } else {
+        "Code"
+    };
+
+    vec![
+        Line::from(language.name.clone()),
+        Line::from(""),
+        Line::from(format!("Category {}", category)),
+        Line::from(format!("Files {}", language.files)),
+        Line::from(format!("Total {}", language.total_lines)),
+        Line::from(format!("Code {}", language.code_lines)),
+        Line::from(format!("Comments {}", language.comment_lines)),
+        Line::from(format!("Documents {}", language.document_lines)),
+        Line::from(format!("Blank {}", language.blank_lines)),
+    ]
+}
+
+fn language_visible_lines(language: &LanguageStat) -> usize {
+    if language.is_document {
+        language.document_lines
+    } else {
+        language.code_lines
+    }
+}
+
 fn composition_bar(code: usize, documents: usize, comments: usize, blanks: usize) -> String {
     const WIDTH: usize = 30;
     let total = (code + documents + comments + blanks).max(1);
@@ -333,6 +548,21 @@ fn percentage(value: usize, total: usize) -> usize {
 
 fn placeholder_lines(title: &'static str, description: &'static str) -> Vec<Line<'static>> {
     vec![Line::from(title), Line::from(description)]
+}
+
+fn footer_text(state: &AppState) -> &'static str {
+    if state.is_editing_language_filter() {
+        return "type filter | Backspace delete | Enter apply | Esc done";
+    }
+
+    match state.current_view() {
+        AppView::Explorer => {
+            "q quit | r rescan | Up/Down select | / filter | Tab next view | 1 dashboard | 2 explorer | 3 report"
+        }
+        AppView::Dashboard | AppView::Report => {
+            "q quit | r rescan | Tab next view | 1 dashboard | 2 explorer | 3 report"
+        }
+    }
 }
 
 fn print_non_interactive_preview(report: &ScanReport) {
@@ -430,5 +660,113 @@ mod tests {
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
         assert!(output.contains("q quit"));
+    }
+
+    #[test]
+    fn explorer_renders_language_list_and_selected_details() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("main.rs"),
+            "fn main() {\n    // greet\n    println!(\"hello\");\n}\n",
+        )
+        .expect("write rust file");
+        fs::write(
+            temp_dir.path().join("README.md"),
+            "# Notes\n\nProject notes.\n",
+        )
+        .expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        let output = crate::render_to_text(&state, 96, 28);
+
+        assert!(output.contains("Languages"));
+        assert!(output.contains("Details"));
+        assert!(output.contains("Rust"));
+        assert!(output.contains("Markdown"));
+        assert!(output.contains("Files"));
+        assert!(output.contains("Category"));
+    }
+
+    #[test]
+    fn explorer_selection_moves_between_languages() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+
+        let first_language = state
+            .selected_language()
+            .expect("initial selected language")
+            .name
+            .clone();
+
+        state.select_next_language();
+        let second_language = state
+            .selected_language()
+            .expect("second selected language")
+            .name
+            .clone();
+
+        assert_ne!(first_language, second_language);
+
+        state.select_previous_language();
+        assert_eq!(
+            state.selected_language().expect("selected language").name,
+            first_language
+        );
+    }
+
+    #[test]
+    fn explorer_language_filter_limits_visible_languages() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+        state.set_language_filter("rust");
+
+        let output = crate::render_to_text(&state, 96, 28);
+
+        assert!(output.contains("Filter: rust"));
+        assert!(output.contains("Rust"));
+        assert!(!output.contains("Markdown"));
+    }
+
+    #[test]
+    fn explorer_filter_can_be_edited_from_key_events() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('/'),
+            &ScanOptions::default(),
+        );
+        for value in ['r', 'u', 's', 't'] {
+            crate::handle_key(
+                &mut state,
+                crossterm::event::KeyCode::Char(value),
+                &ScanOptions::default(),
+            );
+        }
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Enter,
+            &ScanOptions::default(),
+        );
+
+        let output = crate::render_to_text(&state, 96, 28);
+
+        assert!(output.contains("Filter: rust"));
+        assert!(output.contains("Rust"));
+        assert!(!output.contains("Markdown"));
     }
 }
