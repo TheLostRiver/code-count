@@ -35,10 +35,10 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 2: CLI Compatibility
 
-- [ ] Keep `code-count .` useful as a compact summary.
-- [ ] Keep `code-count . --json` valid with the new report model.
-- [ ] Add `--by-language` output.
-- [ ] Keep errors readable for missing paths and unsupported inputs.
+- [x] Keep `code-count .` useful as a compact summary.
+- [x] Keep `code-count . --json` valid with the new report model.
+- [x] Add `--by-language` output.
+- [x] Keep errors readable for missing paths and unsupported inputs.
 
 ## Milestone 3: TUI Foundation
 
