@@ -1,4 +1,5 @@
 use std::{
+    fs,
     io::{self, IsTerminal},
     path::Path,
 };
@@ -22,6 +23,39 @@ pub enum AppView {
     Report,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportFormat {
+    Json,
+    Markdown,
+    Csv,
+}
+
+impl ReportFormat {
+    fn next(self) -> Self {
+        match self {
+            Self::Json => Self::Markdown,
+            Self::Markdown => Self::Csv,
+            Self::Csv => Self::Json,
+        }
+    }
+
+    fn previous(self) -> Self {
+        match self {
+            Self::Json => Self::Csv,
+            Self::Markdown => Self::Json,
+            Self::Csv => Self::Markdown,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Json => "JSON",
+            Self::Markdown => "Markdown",
+            Self::Csv => "CSV",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     report: ScanReport,
@@ -29,6 +63,10 @@ pub struct AppState {
     selected_language_index: usize,
     language_filter: String,
     editing_language_filter: bool,
+    report_format: ReportFormat,
+    include_report_languages: bool,
+    include_report_files: bool,
+    report_status: Option<String>,
 }
 
 impl AppState {
@@ -39,6 +77,10 @@ impl AppState {
             selected_language_index: 0,
             language_filter: String::new(),
             editing_language_filter: false,
+            report_format: ReportFormat::Json,
+            include_report_languages: true,
+            include_report_files: false,
+            report_status: None,
         }
     }
 
@@ -110,6 +152,41 @@ impl AppState {
     pub fn clear_language_filter(&mut self) {
         self.language_filter.clear();
         self.selected_language_index = 0;
+    }
+
+    pub fn report_format(&self) -> ReportFormat {
+        self.report_format
+    }
+
+    pub fn includes_language_details(&self) -> bool {
+        self.include_report_languages
+    }
+
+    pub fn includes_file_details(&self) -> bool {
+        self.include_report_files
+    }
+
+    fn next_report_format(&mut self) {
+        self.report_format = self.report_format.next();
+    }
+
+    fn previous_report_format(&mut self) {
+        self.report_format = self.report_format.previous();
+    }
+
+    fn toggle_report_languages(&mut self) {
+        self.include_report_languages = !self.include_report_languages;
+    }
+
+    fn toggle_report_files(&mut self) {
+        self.include_report_files = !self.include_report_files;
+        if self.include_report_files {
+            self.include_report_languages = true;
+        }
+    }
+
+    fn set_report_status(&mut self, status: impl Into<String>) {
+        self.report_status = Some(status.into());
     }
 
     fn start_language_filter(&mut self) {
@@ -205,6 +282,19 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
         KeyCode::Char('/') if state.current_view() == AppView::Explorer => {
             state.start_language_filter();
         }
+        KeyCode::Left if state.current_view() == AppView::Report => state.previous_report_format(),
+        KeyCode::Right if state.current_view() == AppView::Report => state.next_report_format(),
+        KeyCode::Char('l') if state.current_view() == AppView::Report => {
+            state.toggle_report_languages()
+        }
+        KeyCode::Char('f') if state.current_view() == AppView::Report => {
+            state.toggle_report_files()
+        }
+        KeyCode::Char('e') if state.current_view() == AppView::Report => {
+            if let Err(error) = export_report(state) {
+                state.set_report_status(format!("Export failed: {error}"));
+            }
+        }
         _ => {}
     }
 
@@ -232,12 +322,7 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
     match state.current_view {
         AppView::Dashboard => render_dashboard(chunks[1], buffer, state),
         AppView::Explorer => render_explorer(chunks[1], buffer, state),
-        AppView::Report => render_placeholder(
-            chunks[1],
-            buffer,
-            "Report",
-            placeholder_lines("Report View", "Interactive report export"),
-        ),
+        AppView::Report => render_report(chunks[1], buffer, state),
     }
 
     let footer = Paragraph::new(footer_text(state))
@@ -373,14 +458,44 @@ fn render_explorer_details(area: Rect, buffer: &mut Buffer, state: &AppState) {
         .render(area, buffer);
 }
 
-fn render_placeholder(
-    area: Rect,
-    buffer: &mut Buffer,
-    title: &'static str,
-    lines: Vec<Line<'static>>,
-) {
-    Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title))
+fn render_report(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    if area.width < 70 {
+        render_report_stacked(area, buffer, state);
+    } else {
+        render_report_wide(area, buffer, state);
+    }
+}
+
+fn render_report_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(area);
+
+    render_report_controls(columns[0], buffer, state);
+    render_report_preview(columns[1], buffer, state);
+}
+
+fn render_report_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(9), Constraint::Min(8)])
+        .split(area);
+
+    render_report_controls(rows[0], buffer, state);
+    render_report_preview(rows[1], buffer, state);
+}
+
+fn render_report_controls(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    Paragraph::new(report_control_lines(state))
+        .block(Block::default().borders(Borders::ALL).title("Report"))
+        .wrap(Wrap { trim: true })
+        .render(area, buffer);
+}
+
+fn render_report_preview(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    Paragraph::new(report_preview_lines(state))
+        .block(Block::default().borders(Borders::ALL).title("Preview"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -549,6 +664,222 @@ fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>>
     lines
 }
 
+fn report_control_lines(state: &AppState) -> Vec<Line<'static>> {
+    vec![
+        Line::from(format!("Format {}", state.report_format.label())),
+        Line::from(format!(
+            "Language details {}",
+            toggle_label(state.include_report_languages)
+        )),
+        Line::from(format!(
+            "File details {}",
+            toggle_label(state.include_report_files)
+        )),
+        Line::from(""),
+        Line::from("Left/Right format"),
+        Line::from("l languages"),
+        Line::from("f files"),
+        Line::from("e export"),
+    ]
+}
+
+fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
+    let summary = &state.report.summary;
+    let mut lines = vec![
+        Line::from(format!("Root {}", summary.root.display())),
+        Line::from(format!("Files {}", summary.files)),
+        Line::from(format!("Total lines {}", summary.total_lines)),
+        Line::from(format!("Code lines {}", summary.code_lines)),
+        Line::from(format!("Comment lines {}", summary.comment_lines)),
+        Line::from(format!("Document lines {}", summary.document_lines)),
+        Line::from(format!("Blank lines {}", summary.blank_lines)),
+        Line::from(""),
+        Line::from(format!(
+            "Export target {}",
+            report_output_path(state).display()
+        )),
+    ];
+
+    if state.include_report_languages {
+        lines.push(Line::from(format!(
+            "Languages included {}",
+            state.report.languages.len()
+        )));
+    } else {
+        lines.push(Line::from("Languages included no"));
+    }
+
+    if state.include_report_files {
+        let file_count: usize = state
+            .report
+            .languages
+            .iter()
+            .map(|language| language.file_stats.len())
+            .sum();
+        lines.push(Line::from(format!("Files included {}", file_count)));
+    } else {
+        lines.push(Line::from("Files included no"));
+    }
+
+    if let Some(status) = &state.report_status {
+        lines.push(Line::from(""));
+        lines.push(Line::from(status.clone()));
+    }
+
+    lines
+}
+
+fn toggle_label(enabled: bool) -> &'static str {
+    if enabled { "on" } else { "off" }
+}
+
+fn report_output_path(state: &AppState) -> std::path::PathBuf {
+    state.report.summary.root.join(format!(
+        "code-count-report.{}",
+        report_extension(state.report_format)
+    ))
+}
+
+fn export_report(state: &mut AppState) -> Result<()> {
+    let output_path = report_output_path(state);
+    let contents = render_report_export(state)?;
+
+    fs::write(&output_path, contents)?;
+    let file_name = output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("report");
+    state.set_report_status(format!("Exported {}", file_name));
+
+    Ok(())
+}
+
+fn render_report_export(state: &AppState) -> Result<String> {
+    match state.report_format {
+        ReportFormat::Json => Ok(serde_json::to_string_pretty(&state.report)?),
+        ReportFormat::Markdown => Ok(render_markdown_report(state)),
+        ReportFormat::Csv => Ok(render_csv_report(state)),
+    }
+}
+
+fn render_markdown_report(state: &AppState) -> String {
+    let summary = &state.report.summary;
+    let mut output = String::new();
+
+    output.push_str("# code-count report\n\n");
+    output.push_str(&format!("- Root: {}\n", summary.root.display()));
+    output.push_str(&format!("- Files: {}\n", summary.files));
+    output.push_str(&format!("- Total lines: {}\n", summary.total_lines));
+    output.push_str(&format!("- Code lines: {}\n", summary.code_lines));
+    output.push_str(&format!("- Comment lines: {}\n", summary.comment_lines));
+    output.push_str(&format!("- Document lines: {}\n", summary.document_lines));
+    output.push_str(&format!("- Blank lines: {}\n", summary.blank_lines));
+
+    if state.include_report_languages {
+        output.push_str("\n## Languages\n\n");
+        output.push_str("| Language | Files | Total | Code | Comments | Documents | Blank |\n");
+        output.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+
+        for language in &state.report.languages {
+            output.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                language.name,
+                language.files,
+                language.total_lines,
+                language.code_lines,
+                language.comment_lines,
+                language.document_lines,
+                language.blank_lines
+            ));
+
+            if state.include_report_files {
+                output.push_str(&format!("\n### {}\n\n", language.name));
+                output.push_str("| File | Total | Code | Comments | Documents | Blank |\n");
+                output.push_str("| --- | ---: | ---: | ---: | ---: | ---: |\n");
+                for file_stat in &language.file_stats {
+                    output.push_str(&format!(
+                        "| {} | {} | {} | {} | {} | {} |\n",
+                        display_path(&file_stat.path, &state.report.summary.root),
+                        file_stat.total_lines,
+                        file_stat.code_lines,
+                        file_stat.comment_lines,
+                        file_stat.document_lines,
+                        file_stat.blank_lines
+                    ));
+                }
+                output.push('\n');
+            }
+        }
+    }
+
+    output
+}
+
+fn render_csv_report(state: &AppState) -> String {
+    let mut output = String::new();
+    output.push_str("kind,name,files,total,code,comments,documents,blank\n");
+
+    let summary = &state.report.summary;
+    output.push_str(&format!(
+        "summary,{},{},{},{},{},{},{}\n",
+        csv_escape(&summary.root.display().to_string()),
+        summary.files,
+        summary.total_lines,
+        summary.code_lines,
+        summary.comment_lines,
+        summary.document_lines,
+        summary.blank_lines
+    ));
+
+    if state.include_report_languages {
+        for language in &state.report.languages {
+            output.push_str(&format!(
+                "language,{},{},{},{},{},{},{}\n",
+                csv_escape(&language.name),
+                language.files,
+                language.total_lines,
+                language.code_lines,
+                language.comment_lines,
+                language.document_lines,
+                language.blank_lines
+            ));
+
+            if state.include_report_files {
+                for file_stat in &language.file_stats {
+                    output.push_str(&format!(
+                        "file,{},{},{},{},{},{},{}\n",
+                        csv_escape(&display_path(&file_stat.path, &state.report.summary.root)),
+                        1,
+                        file_stat.total_lines,
+                        file_stat.code_lines,
+                        file_stat.comment_lines,
+                        file_stat.document_lines,
+                        file_stat.blank_lines
+                    ));
+                }
+            }
+        }
+    }
+
+    output
+}
+
+fn csv_escape(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+fn report_extension(format: ReportFormat) -> &'static str {
+    match format {
+        ReportFormat::Json => "json",
+        ReportFormat::Markdown => "md",
+        ReportFormat::Csv => "csv",
+    }
+}
+
 fn format_file_stat(file_stat: &FileStat, root: &Path) -> String {
     let path = display_path(&file_stat.path, root);
     format!(
@@ -589,10 +920,6 @@ fn percentage(value: usize, total: usize) -> usize {
     value * 100 / total
 }
 
-fn placeholder_lines(title: &'static str, description: &'static str) -> Vec<Line<'static>> {
-    vec![Line::from(title), Line::from(description)]
-}
-
 fn footer_text(state: &AppState) -> &'static str {
     if state.is_editing_language_filter() {
         return "type filter | Backspace delete | Enter apply | Esc done";
@@ -602,7 +929,10 @@ fn footer_text(state: &AppState) -> &'static str {
         AppView::Explorer => {
             "q quit | r rescan | Up/Down select | / filter | Tab next view | 1 dashboard | 2 explorer | 3 report"
         }
-        AppView::Dashboard | AppView::Report => {
+        AppView::Report => {
+            "q quit | r rescan | Left/Right format | l languages | f files | e export | Tab next view"
+        }
+        AppView::Dashboard => {
             "q quit | r rescan | Tab next view | 1 dashboard | 2 explorer | 3 report"
         }
     }
@@ -622,7 +952,7 @@ mod tests {
 
     use code_count_core::{ScanOptions, scan_path};
 
-    use crate::{AppState, AppView};
+    use crate::{AppState, AppView, ReportFormat};
 
     #[test]
     fn app_state_starts_on_dashboard_and_cycles_views() {
@@ -837,5 +1167,124 @@ mod tests {
         assert!(output.contains("Filter: rust"));
         assert!(output.contains("Rust"));
         assert!(!output.contains("Markdown"));
+    }
+
+    #[test]
+    fn report_state_defaults_to_json_with_language_details() {
+        let report = scan_path(".", &ScanOptions::default());
+        let state = AppState::new(report);
+
+        assert_eq!(state.report_format(), ReportFormat::Json);
+        assert!(state.includes_language_details());
+        assert!(!state.includes_file_details());
+    }
+
+    #[test]
+    fn report_state_cycles_format_and_toggles_details_from_key_events() {
+        let report = scan_path(".", &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Report);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Right,
+            &ScanOptions::default(),
+        );
+        assert_eq!(state.report_format(), ReportFormat::Markdown);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Right,
+            &ScanOptions::default(),
+        );
+        assert_eq!(state.report_format(), ReportFormat::Csv);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Left,
+            &ScanOptions::default(),
+        );
+        assert_eq!(state.report_format(), ReportFormat::Markdown);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('l'),
+            &ScanOptions::default(),
+        );
+        assert!(!state.includes_language_details());
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('f'),
+            &ScanOptions::default(),
+        );
+        assert!(state.includes_file_details());
+    }
+
+    #[test]
+    fn report_view_renders_export_controls_and_preview() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Report);
+
+        let output = crate::render_to_text(&state, 96, 28);
+
+        assert!(output.contains("Report"));
+        assert!(output.contains("Format"));
+        assert!(output.contains("JSON"));
+        assert!(output.contains("Language details"));
+        assert!(output.contains("File details"));
+        assert!(output.contains("Preview"));
+        assert!(output.contains("Total lines"));
+        assert!(output.contains("e export"));
+    }
+
+    #[test]
+    fn report_export_renders_markdown_and_csv() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.next_report_format();
+        state.toggle_report_files();
+
+        let markdown = crate::render_report_export(&state).expect("render markdown report");
+        assert!(markdown.contains("# code-count report"));
+        assert!(markdown.contains("## Languages"));
+        assert!(markdown.contains("### Rust"));
+        assert!(markdown.contains("main.rs"));
+
+        state.next_report_format();
+        let csv = crate::render_report_export(&state).expect("render csv report");
+        assert!(csv.contains("kind,name,files,total,code,comments,documents,blank"));
+        assert!(csv.contains("language,Rust"));
+        assert!(csv.contains("file,"));
+    }
+
+    #[test]
+    fn report_export_key_writes_file_and_updates_status() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Report);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('e'),
+            &ScanOptions::default(),
+        );
+
+        let export_path = temp_dir.path().join("code-count-report.json");
+        let contents = fs::read_to_string(&export_path).expect("read exported report");
+        assert!(contents.contains("\"summary\""));
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(output.contains("Exported"));
+        assert!(output.contains("code-count-report.json"));
     }
 }

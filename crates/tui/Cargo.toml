@@ -10,6 +10,7 @@ anyhow.workspace = true
 code-count-core.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

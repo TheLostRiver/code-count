@@ -70,11 +70,11 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 6: Report View
 
-- [ ] Choose export format: JSON, Markdown, or CSV.
-- [ ] Choose whether to include language details.
-- [ ] Choose whether to include file details.
-- [ ] Preview the report summary.
-- [ ] Export with `e`.
+- [x] Choose export format: JSON, Markdown, or CSV.
+- [x] Choose whether to include language details.
+- [x] Choose whether to include file details.
+- [x] Preview the report summary.
+- [x] Export with `e`.
 
 ## Milestone 7: Quality Gates
 
