@@ -52,13 +52,13 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 4: Dashboard View v0.1
 
-- [ ] Show project path, file count, and total line count.
-- [ ] Show code, comment, document, and blank line totals.
-- [ ] Render a horizontal composition bar.
-- [ ] Show Top Languages.
-- [ ] Show a compact stats panel.
-- [ ] Show a footer with available key bindings.
-- [ ] Handle narrow terminals with a stacked layout.
+- [x] Show project path, file count, and total line count.
+- [x] Show code, comment, document, and blank line totals.
+- [x] Render a horizontal composition bar.
+- [x] Show Top Languages.
+- [x] Show a compact stats panel.
+- [x] Show a footer with available key bindings.
+- [x] Handle narrow terminals with a stacked layout.
 
 ## Milestone 5: Explorer View
 
