@@ -76,6 +76,14 @@ The first TUI milestone is Dashboard View.
 - [x] Preview the report summary.
 - [x] Export with `e`.
 
+## Milestone 6.5: TUI Visual Polish v0.2
+
+- [x] Add a shared dark terminal visual style for TUI panels.
+- [x] Add scan status text to the TUI header.
+- [x] Polish Dashboard summary, composition, and Top Languages toward the mock.
+- [x] Polish Explorer language/details panels with percentages and largest files.
+- [x] Polish Report controls with report section language.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.

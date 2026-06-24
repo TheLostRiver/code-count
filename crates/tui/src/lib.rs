@@ -16,6 +16,16 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
+const COLOR_BG: Color = Color::Rgb(9, 12, 18);
+const COLOR_PANEL: Color = Color::Rgb(15, 19, 29);
+const COLOR_BORDER: Color = Color::Rgb(37, 42, 54);
+const COLOR_TITLE: Color = Color::Rgb(192, 202, 245);
+const COLOR_MUTED: Color = Color::Rgb(111, 122, 138);
+const COLOR_CODE: Color = Color::Rgb(158, 206, 106);
+const COLOR_COMMENTS: Color = Color::Rgb(122, 162, 247);
+const COLOR_DOCS: Color = Color::Rgb(224, 175, 104);
+const COLOR_BRAND: Color = Color::Rgb(125, 207, 255);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
     Dashboard,
@@ -349,6 +359,7 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
 }
 
 fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
+    buffer.set_style(area, Style::default().bg(COLOR_BG));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -359,11 +370,16 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         .split(area);
 
     let title = Paragraph::new(Line::from(vec![
-        Span::styled("code-count", Style::default().fg(Color::Cyan)),
+        Span::styled("code-count", Style::default().fg(COLOR_BRAND)),
         Span::raw("  "),
-        Span::raw(state.report.summary.root.display().to_string()),
+        Span::styled(
+            state.report.summary.root.display().to_string(),
+            Style::default().fg(COLOR_MUTED),
+        ),
+        Span::raw("  "),
+        Span::styled("scan complete", Style::default().fg(COLOR_MUTED)),
     ]))
-    .block(Block::default().borders(Borders::ALL).title("Project"));
+    .block(panel_block("Project"));
     title.render(chunks[0], buffer);
 
     match state.current_view {
@@ -372,8 +388,7 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         AppView::Report => render_report(chunks[1], buffer, state),
     }
 
-    let footer = Paragraph::new(footer_text(state))
-        .block(Block::default().borders(Borders::ALL).title("Keys"));
+    let footer = Paragraph::new(footer_text(state)).block(panel_block("Keys"));
     footer.render(chunks[2], buffer);
 }
 
@@ -395,6 +410,14 @@ fn buffer_to_string(buffer: &Buffer, width: u16, height: u16) -> String {
     }
 
     output
+}
+
+fn panel_block(title: &'static str) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .title(Span::styled(title, Style::default().fg(COLOR_TITLE)))
+        .border_style(Style::default().fg(COLOR_BORDER).bg(COLOR_PANEL))
+        .style(Style::default().bg(COLOR_PANEL))
 }
 
 fn render_dashboard(area: Rect, buffer: &mut Buffer, state: &AppState) {
@@ -438,7 +461,7 @@ fn render_dashboard_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_stats_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let lines = stats_lines(state);
     Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title("Dashboard"))
+        .block(panel_block("Dashboard"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -446,7 +469,7 @@ fn render_stats_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_composition_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let lines = composition_lines(state);
     Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title("Composition"))
+        .block(panel_block("Composition"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -454,11 +477,7 @@ fn render_composition_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_languages_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let lines = language_lines(state);
     Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Top Languages"),
-        )
+        .block(panel_block("Top Languages"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -493,14 +512,14 @@ fn render_explorer_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 
 fn render_explorer_languages(area: Rect, buffer: &mut Buffer, state: &AppState) {
     Paragraph::new(explorer_language_lines(state))
-        .block(Block::default().borders(Borders::ALL).title("Languages"))
+        .block(panel_block("Languages"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
 
 fn render_explorer_details(area: Rect, buffer: &mut Buffer, state: &AppState) {
     Paragraph::new(explorer_detail_lines(state))
-        .block(Block::default().borders(Borders::ALL).title("Details"))
+        .block(panel_block("Details"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -526,7 +545,7 @@ fn render_report_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_report_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(9), Constraint::Min(8)])
+        .constraints([Constraint::Length(15), Constraint::Min(8)])
         .split(area);
 
     render_report_controls(rows[0], buffer, state);
@@ -535,29 +554,55 @@ fn render_report_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 
 fn render_report_controls(area: Rect, buffer: &mut Buffer, state: &AppState) {
     Paragraph::new(report_control_lines(state))
-        .block(Block::default().borders(Borders::ALL).title("Report"))
+        .block(panel_block("Report"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
 
 fn render_report_preview(area: Rect, buffer: &mut Buffer, state: &AppState) {
     Paragraph::new(report_preview_lines(state))
-        .block(Block::default().borders(Borders::ALL).title("Preview"))
+        .block(panel_block("Preview"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
 
 fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
     let summary = &state.report.summary;
+    let categories = &state.report.categories;
     vec![
-        Line::from(format!(
-            "Files {}  Total {}",
-            summary.files, summary.total_lines
-        )),
-        Line::from(format!("Code {}", summary.code_lines)),
-        Line::from(format!("Comments {}", summary.comment_lines)),
-        Line::from(format!("Documents {}", summary.document_lines)),
-        Line::from(format!("Blank {}", summary.blank_lines)),
+        Line::from(vec![
+            Span::styled("Files", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(summary.files.to_string(), Style::default().fg(COLOR_TITLE)),
+            Span::raw("   "),
+            Span::styled("Total", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(
+                summary.total_lines.to_string(),
+                Style::default().fg(COLOR_CODE),
+            ),
+        ]),
+        segment_bar(
+            categories.code,
+            categories.comments,
+            categories.documents,
+            categories.blanks,
+            56,
+        ),
+        Line::from(vec![
+            Span::styled("code", Style::default().fg(COLOR_CODE)),
+            Span::raw(format!(" {}", summary.code_lines)),
+            Span::raw("   "),
+            Span::styled("comments", Style::default().fg(COLOR_COMMENTS)),
+            Span::raw(format!(" {}", summary.comment_lines)),
+        ]),
+        Line::from(vec![
+            Span::styled("docs", Style::default().fg(COLOR_DOCS)),
+            Span::raw(format!(" {}", summary.document_lines)),
+            Span::raw("   "),
+            Span::styled("blank", Style::default().fg(COLOR_MUTED)),
+            Span::raw(format!(" {}", summary.blank_lines)),
+        ]),
     ]
 }
 
@@ -566,25 +611,10 @@ fn composition_lines(state: &AppState) -> Vec<Line<'static>> {
     let total = state.report.summary.total_lines.max(1);
 
     vec![
-        Line::from(composition_bar(
-            categories.code,
-            categories.documents,
-            categories.comments,
-            categories.blanks,
-        )),
-        Line::from(format!("Code {:>3}%", percentage(categories.code, total))),
-        Line::from(format!(
-            "Documents {:>3}%",
-            percentage(categories.documents, total)
-        )),
-        Line::from(format!(
-            "Comments {:>3}%",
-            percentage(categories.comments, total)
-        )),
-        Line::from(format!(
-            "Blank {:>3}%",
-            percentage(categories.blanks, total)
-        )),
+        composition_row("Code", categories.code, total, COLOR_CODE, '#'),
+        composition_row("Comments", categories.comments, total, COLOR_COMMENTS, '='),
+        composition_row("Docs", categories.documents, total, COLOR_DOCS, '+'),
+        composition_row("Blank", categories.blanks, total, COLOR_MUTED, '.'),
     ]
 }
 
@@ -603,10 +633,17 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
             language.code_lines
         };
 
-        lines.push(Line::from(format!(
-            "{:<14} {:>6} {:>10}",
-            language.name, visible_lines, category
-        )));
+        let color = if language.is_document {
+            COLOR_DOCS
+        } else {
+            COLOR_CODE
+        };
+        lines.push(Line::from(vec![
+            Span::raw(format!("{:<14}", language.name)),
+            Span::styled(format!("{:>8}", visible_lines), Style::default().fg(color)),
+            Span::raw("  "),
+            Span::styled(category, Style::default().fg(COLOR_MUTED)),
+        ]));
     }
 
     if lines.is_empty() {
@@ -616,13 +653,77 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
     lines
 }
 
+fn composition_row(
+    label: &'static str,
+    value: usize,
+    total: usize,
+    color: Color,
+    fill: char,
+) -> Line<'static> {
+    let percent = percentage(value, total);
+    let filled = (percent * 20 / 100).max(if value > 0 { 1 } else { 0 });
+    let empty = 20usize.saturating_sub(filled);
+
+    Line::from(vec![
+        Span::styled(format!("{label:<9}"), Style::default().fg(color)),
+        Span::styled(fill.to_string().repeat(filled), Style::default().fg(color)),
+        Span::styled("-".repeat(empty), Style::default().fg(COLOR_MUTED)),
+        Span::raw(" "),
+        Span::styled(format!("{percent:>3}%"), Style::default().fg(color)),
+    ])
+}
+
+fn segment_bar(
+    code: usize,
+    comments: usize,
+    documents: usize,
+    blanks: usize,
+    width: usize,
+) -> Line<'static> {
+    let total = (code + comments + documents + blanks).max(1);
+    let code_width = segment_width(code, total, width);
+    let comments_width = segment_width(comments, total, width);
+    let documents_width = segment_width(documents, total, width);
+    let used_width = code_width + comments_width + documents_width;
+    let blanks_width = width.saturating_sub(used_width);
+
+    Line::from(vec![
+        Span::styled("#".repeat(code_width), Style::default().fg(COLOR_CODE)),
+        Span::styled(
+            "=".repeat(comments_width),
+            Style::default().fg(COLOR_COMMENTS),
+        ),
+        Span::styled("+".repeat(documents_width), Style::default().fg(COLOR_DOCS)),
+        Span::styled(".".repeat(blanks_width), Style::default().fg(COLOR_MUTED)),
+    ])
+}
+
+fn segment_width(value: usize, total: usize, width: usize) -> usize {
+    if value == 0 {
+        0
+    } else {
+        (width * value / total).max(1)
+    }
+}
+
 fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
+    let total_lines = state.report.summary.total_lines.max(1);
 
     if state.language_filter.is_empty() {
-        lines.push(Line::from("Filter:"));
+        lines.push(Line::from(vec![
+            Span::styled("Filter", Style::default().fg(COLOR_MUTED)),
+            Span::raw(":"),
+        ]));
     } else {
-        lines.push(Line::from(format!("Filter: {}", state.language_filter)));
+        lines.push(Line::from(vec![
+            Span::styled("Filter", Style::default().fg(COLOR_MUTED)),
+            Span::raw(": "),
+            Span::styled(
+                state.language_filter.clone(),
+                Style::default().fg(COLOR_TITLE),
+            ),
+        ]));
     }
 
     lines.push(Line::from(""));
@@ -634,14 +735,21 @@ fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
             " "
         };
         let category = if language.is_document { "doc" } else { "code" };
+        let percent = percentage(language.total_lines, total_lines);
+        let color = if language.is_document {
+            COLOR_DOCS
+        } else {
+            COLOR_CODE
+        };
 
-        lines.push(Line::from(format!(
-            "{} {:<16} {:>6} {:>4}",
-            selection,
-            language.name,
-            language_visible_lines(language),
-            category
-        )));
+        lines.push(Line::from(vec![
+            Span::styled(selection, Style::default().fg(COLOR_TITLE)),
+            Span::raw(" "),
+            Span::styled(format!("{:<16}", language.name), Style::default().fg(color)),
+            Span::raw(format!("{:>4}%", percent)),
+            Span::raw(" "),
+            Span::styled(format!("{:>4}", category), Style::default().fg(COLOR_MUTED)),
+        ]));
     }
 
     if lines.len() == 2 {
@@ -666,7 +774,21 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
     };
 
     let mut lines = vec![
-        Line::from(language.name.clone()),
+        Line::from(vec![Span::styled(
+            language.name.clone(),
+            Style::default().fg(if language.is_document {
+                COLOR_DOCS
+            } else {
+                COLOR_CODE
+            }),
+        )]),
+        segment_bar(
+            language.code_lines,
+            language.comment_lines,
+            language.document_lines,
+            language.blank_lines,
+            36,
+        ),
         Line::from(""),
         Line::from(format!("Category {}", category)),
         Line::from(format!("Files {}", language.files)),
@@ -676,19 +798,14 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         Line::from(format!("Documents {}", language.document_lines)),
         Line::from(format!("Blank {}", language.blank_lines)),
         Line::from(""),
-        Line::from("Files"),
+        Line::from(vec![Span::styled(
+            "Largest files",
+            Style::default().fg(COLOR_MUTED),
+        )]),
     ];
 
     lines.extend(file_detail_lines(language, &state.report.summary.root));
     lines
-}
-
-fn language_visible_lines(language: &LanguageStat) -> usize {
-    if language.is_document {
-        language.document_lines
-    } else {
-        language.code_lines
-    }
 }
 
 fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>> {
@@ -713,6 +830,26 @@ fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>>
 
 fn report_control_lines(state: &AppState) -> Vec<Line<'static>> {
     vec![
+        Line::from(vec![Span::styled(
+            "Report sections",
+            Style::default().fg(Color::Rgb(187, 154, 247)),
+        )]),
+        Line::from("[x] Summary"),
+        Line::from(format!(
+            "[{}] Languages",
+            checkbox(state.include_report_languages)
+        )),
+        Line::from("[x] Documentation ratio"),
+        Line::from(format!(
+            "[{}] Per-file table",
+            checkbox(state.include_report_files)
+        )),
+        Line::from("[ ] Save history snapshot"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Export",
+            Style::default().fg(COLOR_MUTED),
+        )]),
         Line::from(format!("Format {}", state.report_format.label())),
         Line::from(format!(
             "Language details {}",
@@ -728,6 +865,10 @@ fn report_control_lines(state: &AppState) -> Vec<Line<'static>> {
         Line::from("f files"),
         Line::from("e export"),
     ]
+}
+
+fn checkbox(enabled: bool) -> &'static str {
+    if enabled { "x" } else { " " }
 }
 
 fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
@@ -942,27 +1083,6 @@ fn display_path(path: &Path, root: &Path) -> String {
         .replace('\\', "/")
 }
 
-fn composition_bar(code: usize, documents: usize, comments: usize, blanks: usize) -> String {
-    const WIDTH: usize = 30;
-    let total = (code + documents + comments + blanks).max(1);
-    let code_width = WIDTH * code / total;
-    let document_width = WIDTH * documents / total;
-    let comment_width = WIDTH * comments / total;
-    let mut blank_width = WIDTH.saturating_sub(code_width + document_width + comment_width);
-
-    if code + documents + comments + blanks > 0 && blank_width == 0 && blanks > 0 {
-        blank_width = 1;
-    }
-
-    format!(
-        "{}{}{}{}",
-        "#".repeat(code_width),
-        "=".repeat(document_width),
-        "+".repeat(comment_width),
-        ".".repeat(blank_width)
-    )
-}
-
 fn percentage(value: usize, total: usize) -> usize {
     value * 100 / total
 }
@@ -1056,11 +1176,15 @@ mod tests {
         let output = crate::render_to_text(&state, 96, 28);
 
         assert!(output.contains("code-count"));
+        assert!(output.contains("scan complete"));
         assert!(output.contains("Files"));
         assert!(output.contains("Total"));
+        assert!(output.contains("code"));
+        assert!(output.contains("comments"));
+        assert!(output.contains("docs"));
+        assert!(output.contains("blank"));
         assert!(output.contains("Code"));
         assert!(output.contains("Comments"));
-        assert!(output.contains("Documents"));
         assert!(output.contains("Blank"));
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
@@ -1103,6 +1227,7 @@ mod tests {
 
         assert!(output.contains("Languages"));
         assert!(output.contains("Details"));
+        assert!(output.contains("Largest files"));
         assert!(output.contains("Rust"));
         assert!(output.contains("Markdown"));
         assert!(output.contains("Files"));
@@ -1381,6 +1506,7 @@ mod tests {
         let output = crate::render_to_text(&state, 96, 28);
 
         assert!(output.contains("Report"));
+        assert!(output.contains("Report sections"));
         assert!(output.contains("Format"));
         assert!(output.contains("JSON"));
         assert!(output.contains("Language details"));
