@@ -357,6 +357,7 @@ dependencies = [
  "crossterm",
  "ratatui",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

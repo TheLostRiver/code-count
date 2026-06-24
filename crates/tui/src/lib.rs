@@ -382,6 +382,11 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
         KeyCode::Char('u') if state.current_view() == AppView::Explorer => {
             state.undo_last_session_ignore(options);
         }
+        KeyCode::Char('w') if state.current_view() == AppView::Explorer => {
+            if let Err(error) = save_scope_to_project_config(state) {
+                state.scope_status = Some(format!("Save failed: {error}"));
+            }
+        }
         KeyCode::Left if state.current_view() == AppView::Report => state.previous_report_format(),
         KeyCode::Right if state.current_view() == AppView::Report => state.next_report_format(),
         KeyCode::Char('l') if state.current_view() == AppView::Report => {
@@ -1159,6 +1164,56 @@ fn render_report_export(state: &AppState) -> Result<String> {
     )?)
 }
 
+fn save_scope_to_project_config(state: &mut AppState) -> Result<()> {
+    let ignored_paths = persisted_ignored_paths(state);
+    if ignored_paths.is_empty() {
+        state.scope_status = Some("No scope rules to save".to_owned());
+        return Ok(());
+    }
+
+    let config_path = state.report.summary.root.join("code-count.toml");
+    let mut config = if config_path.exists() {
+        let contents = fs::read_to_string(&config_path)?;
+        contents.parse::<toml::Value>()?
+    } else {
+        toml::Value::Table(toml::map::Map::new())
+    };
+
+    let root = config
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("code-count.toml root must be a table"))?;
+    let scan = root
+        .entry("scan")
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+    let scan_table = scan
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("code-count.toml [scan] must be a table"))?;
+    scan_table.insert(
+        "ignored_paths".to_owned(),
+        toml::Value::Array(
+            ignored_paths
+                .iter()
+                .map(|path| toml::Value::String(path.clone()))
+                .collect(),
+        ),
+    );
+
+    fs::write(&config_path, toml::to_string_pretty(&config)?)?;
+    state.scope_status = Some("Saved scope to code-count.toml".to_owned());
+    Ok(())
+}
+
+fn persisted_ignored_paths(state: &AppState) -> Vec<String> {
+    let mut paths = Vec::new();
+    for path in &state.ignored_paths {
+        if path == "code-count.toml" {
+            continue;
+        }
+        push_unique(&mut paths, path.clone());
+    }
+    paths
+}
+
 fn next_report_format(format: ReportFormat) -> ReportFormat {
     match format {
         ReportFormat::Json => ReportFormat::Markdown,
@@ -1388,6 +1443,8 @@ fn footer_line(state: &AppState) -> Line<'static> {
             Span::raw(" ignore | "),
             key_chip("u"),
             Span::raw(" undo | "),
+            key_chip("w"),
+            Span::raw(" save | "),
             key_chip("Tab"),
             Span::raw(" view | "),
             key_chip("q"),
@@ -1703,6 +1760,101 @@ mod tests {
         let output = crate::render_to_text(&state, 96, 28);
         assert!(!output.contains("ignored: vendor"));
         assert!(output.contains("Restored vendor"));
+    }
+
+    #[test]
+    fn explorer_write_key_saves_active_ignores_to_project_config() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let vendor_dir = temp_dir.path().join("vendor");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&vendor_dir).expect("create vendor dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        fs::write(
+            vendor_dir.join("generated.rs"),
+            "pub fn generated() {}\n".repeat(20),
+        )
+        .expect("write generated rust file");
+        fs::write(src_dir.join("main.rs"), "fn main() {}\n").expect("write main rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('i'),
+            &ScanOptions::default(),
+        );
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('w'),
+            &ScanOptions::default(),
+        );
+
+        let config = fs::read_to_string(temp_dir.path().join("code-count.toml"))
+            .expect("read written config");
+        assert!(config.contains("[scan]"));
+        assert!(config.contains("ignored_paths"));
+        assert!(config.contains("vendor"));
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(output.contains("Saved scope to code-count.toml"));
+    }
+
+    #[test]
+    fn explorer_write_key_without_ignores_does_not_create_project_config() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('w'),
+            &ScanOptions::default(),
+        );
+
+        assert!(!temp_dir.path().join("code-count.toml").exists());
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(output.contains("No scope rules to save"));
+    }
+
+    #[test]
+    fn explorer_write_key_keeps_invalid_project_config_on_save_failure() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("code-count.toml"), "[scan\n").expect("write bad config");
+        let vendor_dir = temp_dir.path().join("vendor");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&vendor_dir).expect("create vendor dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        fs::write(
+            vendor_dir.join("generated.rs"),
+            "pub fn generated() {}\n".repeat(20),
+        )
+        .expect("write generated rust file");
+        fs::write(src_dir.join("main.rs"), "fn main() {}\n").expect("write main rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('i'),
+            &ScanOptions::default(),
+        );
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('w'),
+            &ScanOptions::default(),
+        );
+
+        let config =
+            fs::read_to_string(temp_dir.path().join("code-count.toml")).expect("read bad config");
+        assert_eq!(config, "[scan\n");
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(output.contains("Save failed"));
     }
 
     #[test]
