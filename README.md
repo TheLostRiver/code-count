@@ -27,6 +27,35 @@ code-count . --by-language
 code-count tui .
 ```
 
+## Portable Windows install
+
+Build a portable package:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
+```
+
+The package is written to:
+
+```text
+dist\code-count-windows-x64\
+```
+
+Move that folder wherever you want to keep the tool, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+The installer adds the portable folder to your user `PATH`, so a new terminal can
+run `code-count` from any directory. It does not require administrator rights.
+
+To remove the PATH entry later:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
 Use ignore flags for one-off scans:
 
 ```powershell

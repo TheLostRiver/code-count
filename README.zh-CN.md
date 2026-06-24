@@ -24,6 +24,41 @@ code-count . --by-language
 code-count tui .
 ```
 
+## Windows 便携版安装
+
+构建便携包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
+```
+
+打包结果会生成到：
+
+```text
+dist\code-count-windows-x64\
+```
+
+把这个文件夹移动到你想保存工具的位置，然后在该文件夹中运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+安装脚本会把便携包所在目录加入当前用户的 `PATH`，不需要管理员权限。打开一个新的终端后，就可以在任意目录直接运行：
+
+```powershell
+code-count .
+code-count tui .
+```
+
+如果以后想移除全局命令入口，在便携包目录运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+卸载脚本只会移除用户 `PATH` 中的目录项，不会删除工具文件。
+
 一次性扫描时可以忽略空白行或注释行：
 
 ```powershell

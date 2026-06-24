@@ -93,6 +93,13 @@ The first TUI milestone is Dashboard View.
 - [x] Manually test the TUI in Windows Terminal.
 - [x] Add CI for Windows, macOS, and Linux when the CLI stabilizes.
 
+## Milestone 8: Portable Windows Release
+
+- [x] Build a single `code-count.exe` release artifact.
+- [x] Add a Windows portable package script.
+- [x] Add user PATH install and uninstall scripts.
+- [x] Document portable install in English and Chinese README files.
+
 ## Later Ideas
 
 - [x] Scan history and diff between scans.
