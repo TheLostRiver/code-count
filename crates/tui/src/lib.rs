@@ -570,13 +570,16 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
             Span::styled("Total", Style::default().fg(COLOR_MUTED)),
             Span::raw(" "),
             Span::styled(
-                summary.total_lines.to_string(),
+                format_count(summary.total_lines),
                 Style::default().fg(COLOR_CODE),
             ),
             Span::raw("   "),
             Span::styled("Files", Style::default().fg(COLOR_MUTED)),
             Span::raw(" "),
-            Span::styled(summary.files.to_string(), Style::default().fg(COLOR_TITLE)),
+            Span::styled(
+                format_count(summary.files),
+                Style::default().fg(COLOR_TITLE),
+            ),
         ]),
         segment_bar(
             categories.code,
@@ -587,17 +590,17 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
         ),
         Line::from(vec![
             Span::styled("code", Style::default().fg(COLOR_CODE)),
-            Span::raw(format!(" {}", summary.code_lines)),
+            Span::raw(format!(" {}", format_count(summary.code_lines))),
             Span::raw("   "),
             Span::styled("comments", Style::default().fg(COLOR_COMMENTS)),
-            Span::raw(format!(" {}", summary.comment_lines)),
+            Span::raw(format!(" {}", format_count(summary.comment_lines))),
         ]),
         Line::from(vec![
             Span::styled("docs", Style::default().fg(COLOR_DOCS)),
-            Span::raw(format!(" {}", summary.document_lines)),
+            Span::raw(format!(" {}", format_count(summary.document_lines))),
             Span::raw("   "),
             Span::styled("blank", Style::default().fg(COLOR_MUTED)),
-            Span::raw(format!(" {}", summary.blank_lines)),
+            Span::raw(format!(" {}", format_count(summary.blank_lines))),
         ]),
     ]
 }
@@ -648,7 +651,10 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
         let share = percentage(language.total_lines, total);
         lines.push(Line::from(vec![
             Span::raw(format!("{:<14}", language.name)),
-            Span::styled(format!("{:>8}", visible_lines), Style::default().fg(color)),
+            Span::styled(
+                format!("{:>8}", format_count(visible_lines)),
+                Style::default().fg(color),
+            ),
             Span::raw("  "),
             Span::styled(format!("{share:>3}%"), Style::default().fg(COLOR_TITLE)),
             Span::raw("  "),
@@ -680,7 +686,7 @@ fn composition_row(label: &'static str, value: usize, total: usize, color: Color
         ),
         Span::raw(" "),
         Span::styled(format!("{percent:>3}%"), Style::default().fg(color)),
-        Span::raw(format!("  {value:>6} lines")),
+        Span::raw(format!("  {:>6} lines", format_count(value))),
     ])
 }
 
@@ -826,12 +832,15 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         )]),
         Line::from(format!("Category {}", category)),
         Line::from(format!("Project Share {}%", share)),
-        Line::from(format!("Files {}", language.files)),
-        Line::from(format!("Total {}", language.total_lines)),
-        Line::from(format!("Code {}", language.code_lines)),
-        Line::from(format!("Comments {}", language.comment_lines)),
-        Line::from(format!("Documents {}", language.document_lines)),
-        Line::from(format!("Blank {}", language.blank_lines)),
+        Line::from(format!("Files {}", format_count(language.files))),
+        Line::from(format!("Total {}", format_count(language.total_lines))),
+        Line::from(format!("Code {}", format_count(language.code_lines))),
+        Line::from(format!("Comments {}", format_count(language.comment_lines))),
+        Line::from(format!(
+            "Documents {}",
+            format_count(language.document_lines)
+        )),
+        Line::from(format!("Blank {}", format_count(language.blank_lines))),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Largest files",
@@ -897,19 +906,34 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
         Line::from(format!("- Root: {}", summary.root.display())),
         Line::from(format!("Target {}", report_output_path(state).display())),
         Line::from(""),
-        Line::from(format!("- Files: {}", summary.files)),
-        Line::from(format!("- Total lines: {}", summary.total_lines)),
-        Line::from(format!("- Code lines: {}", summary.code_lines)),
-        Line::from(format!("- Comment lines: {}", summary.comment_lines)),
-        Line::from(format!("- Document lines: {}", summary.document_lines)),
-        Line::from(format!("- Blank lines: {}", summary.blank_lines)),
+        Line::from(format!("- Files: {}", format_count(summary.files))),
+        Line::from(format!(
+            "- Total lines: {}",
+            format_count(summary.total_lines)
+        )),
+        Line::from(format!(
+            "- Code lines: {}",
+            format_count(summary.code_lines)
+        )),
+        Line::from(format!(
+            "- Comment lines: {}",
+            format_count(summary.comment_lines)
+        )),
+        Line::from(format!(
+            "- Document lines: {}",
+            format_count(summary.document_lines)
+        )),
+        Line::from(format!(
+            "- Blank lines: {}",
+            format_count(summary.blank_lines)
+        )),
         Line::from(""),
     ];
 
     if state.include_report_languages {
         lines.push(Line::from(format!(
             "Languages included {}",
-            state.report.languages.len()
+            format_count(state.report.languages.len())
         )));
     } else {
         lines.push(Line::from("Languages included no"));
@@ -922,7 +946,10 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
             .iter()
             .map(|language| language.file_stats.len())
             .sum();
-        lines.push(Line::from(format!("Files included {}", file_count)));
+        lines.push(Line::from(format!(
+            "Files included {}",
+            format_count(file_count)
+        )));
     } else {
         lines.push(Line::from("Files included no"));
     }
@@ -1044,7 +1071,9 @@ fn format_file_stat(file_stat: &FileStat, root: &Path) -> String {
     let path = display_path(&file_stat.path, root);
     format!(
         "{:<28} total {:>5} code {:>5}",
-        path, file_stat.total_lines, file_stat.code_lines
+        path,
+        format_count(file_stat.total_lines),
+        format_count(file_stat.code_lines)
     )
 }
 
@@ -1057,6 +1086,20 @@ fn display_path(path: &Path, root: &Path) -> String {
 
 fn percentage(value: usize, total: usize) -> usize {
     value * 100 / total
+}
+
+fn format_count(value: usize) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+
+    for (index, digit) in digits.chars().rev().enumerate() {
+        if index > 0 && index % 3 == 0 {
+            formatted.push(',');
+        }
+        formatted.push(digit);
+    }
+
+    formatted.chars().rev().collect()
 }
 
 fn view_title(view: AppView) -> &'static str {
@@ -1137,8 +1180,8 @@ fn footer_line(state: &AppState) -> Line<'static> {
 fn print_non_interactive_preview(report: &ScanReport) {
     println!("TUI preview");
     println!("Root: {}", report.summary.root.display());
-    println!("Files: {}", report.summary.files);
-    println!("Total lines: {}", report.summary.total_lines);
+    println!("Files: {}", format_count(report.summary.files));
+    println!("Total lines: {}", format_count(report.summary.total_lines));
     println!("Run this command in an interactive terminal for the full TUI.");
 }
 
@@ -1240,6 +1283,29 @@ mod tests {
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
         assert!(output.contains("[q]"));
+    }
+
+    #[test]
+    fn tui_renders_large_counts_with_group_separators() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("main.rs"),
+            "let value = 1;\n".repeat(1234),
+        )
+        .expect("write rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+
+        let dashboard = crate::render_to_text(&state, 96, 28);
+        assert!(dashboard.contains("1,234"));
+
+        state.set_view(AppView::Explorer);
+        let explorer = crate::render_to_text(&state, 96, 28);
+        assert!(explorer.contains("Total 1,234"));
+
+        state.set_view(AppView::Report);
+        let report = crate::render_to_text(&state, 96, 28);
+        assert!(report.contains("- Total lines: 1,234"));
     }
 
     #[test]
