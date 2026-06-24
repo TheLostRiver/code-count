@@ -92,6 +92,14 @@ The first TUI milestone is Dashboard View.
 - [x] Polish Report Builder controls and preview copy.
 - [x] Render key bindings as compact key-hint chips.
 
+## Milestone 6.7: TUI Visual Polish v0.4
+
+- [x] Tighten TUI footer key hints toward the mock density.
+- [x] Add Space toggle support in Report View.
+- [x] Add Dashboard Top Languages columns for language, lines, share, and type.
+- [x] Add Explorer selected-language share information.
+- [x] Clarify Report Export options.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.

@@ -614,6 +614,17 @@ fn composition_lines(state: &AppState) -> Vec<Line<'static>> {
 
 fn language_lines(state: &AppState) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
+    let total = state.report.summary.total_lines.max(1);
+
+    lines.push(Line::from(vec![
+        Span::styled("Language", Style::default().fg(COLOR_MUTED)),
+        Span::raw("       "),
+        Span::styled("Lines", Style::default().fg(COLOR_MUTED)),
+        Span::raw("  "),
+        Span::styled("Share", Style::default().fg(COLOR_MUTED)),
+        Span::raw("  "),
+        Span::styled("Type", Style::default().fg(COLOR_MUTED)),
+    ]));
 
     for language in state.report.languages.iter().take(6) {
         let category = if language.is_document {
@@ -632,15 +643,18 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
         } else {
             COLOR_CODE
         };
+        let share = percentage(language.total_lines, total);
         lines.push(Line::from(vec![
             Span::raw(format!("{:<14}", language.name)),
             Span::styled(format!("{:>8}", visible_lines), Style::default().fg(color)),
+            Span::raw("  "),
+            Span::styled(format!("{share:>3}%"), Style::default().fg(COLOR_TITLE)),
             Span::raw("  "),
             Span::styled(category, Style::default().fg(COLOR_MUTED)),
         ]));
     }
 
-    if lines.is_empty() {
+    if lines.len() == 1 {
         lines.push(Line::from("No languages found"));
     }
 
@@ -772,6 +786,10 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
     } else {
         "Code"
     };
+    let share = percentage(
+        language.total_lines,
+        state.report.summary.total_lines.max(1),
+    );
 
     let mut lines = vec![
         Line::from(vec![Span::styled(
@@ -791,6 +809,7 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         ),
         Line::from(""),
         Line::from(format!("Category {}", category)),
+        Line::from(format!("Share {}%", share)),
         Line::from(format!("Files {}", language.files)),
         Line::from(format!("Total {}", language.total_lines)),
         Line::from(format!("Code {}", language.code_lines)),
@@ -918,7 +937,7 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
             ),
         ]),
         Line::from(format!(
-            "Language details {}   File details {}",
+            "Options  Language details {}   File details {}",
             toggle_label(state.include_report_languages),
             toggle_label(state.include_report_files)
         )),
@@ -1174,6 +1193,9 @@ mod tests {
         assert!(output.contains("Blank"));
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
+        assert!(output.contains("Language"));
+        assert!(output.contains("Lines"));
+        assert!(output.contains("Share"));
         assert!(output.contains("[Tab]"));
         assert!(output.contains("[r]"));
         assert!(output.contains("[q]"));
@@ -1220,6 +1242,7 @@ mod tests {
         assert!(output.contains("Markdown"));
         assert!(output.contains("Files"));
         assert!(output.contains("Category"));
+        assert!(output.contains("Share"));
     }
 
     #[test]
@@ -1514,6 +1537,7 @@ mod tests {
         assert!(output.contains("JSON"));
         assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
+        assert!(output.contains("Options"));
         assert!(output.contains("Preview"));
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));
