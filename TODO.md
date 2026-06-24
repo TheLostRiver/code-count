@@ -100,6 +100,13 @@ The first TUI milestone is Dashboard View.
 - [x] Add Explorer selected-language share information.
 - [x] Clarify Report Export options.
 
+## Milestone 6.8: TUI Visual Polish v0.5
+
+- [x] Replace ASCII bar glyphs with block-style TUI bars.
+- [x] Add line counts to Dashboard composition rows.
+- [x] Add Explorer detail breakdown and project share labels.
+- [x] Add Report Export ready state.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.

@@ -820,8 +820,12 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
             36,
         ),
         Line::from(""),
+        Line::from(vec![Span::styled(
+            "Breakdown",
+            Style::default().fg(COLOR_MUTED),
+        )]),
         Line::from(format!("Category {}", category)),
-        Line::from(format!("Share {}%", share)),
+        Line::from(format!("Project Share {}%", share)),
         Line::from(format!("Files {}", language.files)),
         Line::from(format!("Total {}", language.total_lines)),
         Line::from(format!("Code {}", language.code_lines)),
@@ -957,6 +961,15 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
 
     if let Some(status) = &state.report_status {
         lines.push(Line::from(status.clone()));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("Export ready", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(
+                report_extension(state.report_format),
+                Style::default().fg(COLOR_TITLE),
+            ),
+        ]));
     }
 
     lines
@@ -1257,6 +1270,8 @@ mod tests {
         assert!(output.contains("Files"));
         assert!(output.contains("Category"));
         assert!(output.contains("Share"));
+        assert!(output.contains("Project Share"));
+        assert!(output.contains("Breakdown"));
     }
 
     #[test]
@@ -1552,6 +1567,7 @@ mod tests {
         assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
         assert!(output.contains("Options"));
+        assert!(output.contains("Export ready"));
         assert!(output.contains("Preview"));
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));
