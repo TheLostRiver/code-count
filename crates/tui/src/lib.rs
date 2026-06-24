@@ -34,6 +34,7 @@ const COLOR_KEY_BG: Color = Color::Rgb(37, 44, 68);
 const COLOR_KEY_TEXT: Color = Color::Rgb(198, 208, 245);
 const BAR_FILL: char = '█';
 const BAR_EMPTY: char = '░';
+const SUMMARY_WIDTH: usize = 76;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
@@ -438,7 +439,11 @@ fn render_dashboard_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 }
 
 fn render_stats_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
-    let lines = stats_lines(state);
+    let lines = if area.width < 70 {
+        compact_stats_lines(state)
+    } else {
+        stats_lines(state)
+    };
     Paragraph::new(lines)
         .block(panel_block("Summary"))
         .wrap(Wrap { trim: true })
@@ -566,6 +571,46 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
     let summary = &state.report.summary;
     let categories = &state.report.categories;
     vec![
+        summary_total_line(summary.total_lines),
+        segment_bar(
+            categories.code,
+            categories.comments,
+            categories.documents,
+            categories.blanks,
+            SUMMARY_WIDTH,
+        ),
+        summary_pair_line(
+            "code",
+            summary.code_lines,
+            COLOR_CODE,
+            "comments",
+            summary.comment_lines,
+            COLOR_COMMENTS,
+        ),
+        summary_pair_line(
+            "docs",
+            summary.document_lines,
+            COLOR_DOCS,
+            "blank",
+            summary.blank_lines,
+            COLOR_MUTED,
+        ),
+        Line::from(vec![
+            Span::styled("Files", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(
+                format_count(summary.files),
+                Style::default().fg(COLOR_TITLE),
+            ),
+        ]),
+    ]
+}
+
+fn compact_stats_lines(state: &AppState) -> Vec<Line<'static>> {
+    let summary = &state.report.summary;
+    let categories = &state.report.categories;
+
+    vec![
         Line::from(vec![
             Span::styled("Total", Style::default().fg(COLOR_MUTED)),
             Span::raw(" "),
@@ -586,7 +631,7 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
             categories.comments,
             categories.documents,
             categories.blanks,
-            76,
+            36,
         ),
         Line::from(vec![
             Span::styled("code", Style::default().fg(COLOR_CODE)),
@@ -603,6 +648,36 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
             Span::raw(format!(" {}", format_count(summary.blank_lines))),
         ]),
     ]
+}
+
+fn summary_total_line(total_lines: usize) -> Line<'static> {
+    let value = format_count(total_lines);
+    let spaces = SUMMARY_WIDTH.saturating_sub("Total".len() + value.len());
+
+    Line::from(vec![
+        Span::styled("Total", Style::default().fg(COLOR_MUTED)),
+        Span::raw(" ".repeat(spaces)),
+        Span::styled(value, Style::default().fg(COLOR_CODE)),
+    ])
+}
+
+fn summary_pair_line(
+    left_label: &'static str,
+    left_value: usize,
+    left_color: Color,
+    right_label: &'static str,
+    right_value: usize,
+    right_color: Color,
+) -> Line<'static> {
+    let left = format!("{left_label} {}", format_count(left_value));
+    let right = format!("{right_label} {}", format_count(right_value));
+    let spaces = SUMMARY_WIDTH.saturating_sub(left.len() + right.len());
+
+    Line::from(vec![
+        Span::styled(left, Style::default().fg(left_color)),
+        Span::raw(" ".repeat(spaces)),
+        Span::styled(right, Style::default().fg(right_color)),
+    ])
 }
 
 fn composition_lines(state: &AppState) -> Vec<Line<'static>> {
@@ -1260,7 +1335,17 @@ mod tests {
         let state = AppState::new(report);
         let lines: Vec<String> = crate::stats_lines(&state).iter().map(line_text).collect();
 
+        assert!(lines[0].starts_with("Total"));
+        assert!(lines[0].chars().count() >= 72);
+        assert!(
+            lines[0]
+                .trim_end()
+                .ends_with(&crate::format_count(state.report().summary.total_lines))
+        );
         assert!(lines[1].chars().count() >= 72);
+        assert!(lines[2].chars().count() >= 56);
+        assert!(lines[3].chars().count() >= 56);
+        assert!(lines.iter().any(|line| line.contains("Files")));
     }
 
     #[test]
