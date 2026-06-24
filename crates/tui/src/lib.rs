@@ -694,24 +694,8 @@ fn composition_lines(state: &AppState) -> Vec<Line<'static>> {
 
 fn language_lines(state: &AppState) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
-    let total = state.report.summary.total_lines.max(1);
-
-    lines.push(Line::from(vec![
-        Span::styled("Language", Style::default().fg(COLOR_MUTED)),
-        Span::raw("       "),
-        Span::styled("Lines", Style::default().fg(COLOR_MUTED)),
-        Span::raw("  "),
-        Span::styled("Share", Style::default().fg(COLOR_MUTED)),
-        Span::raw("  "),
-        Span::styled("Type", Style::default().fg(COLOR_MUTED)),
-    ]));
 
     for language in state.report.languages.iter().take(6) {
-        let category = if language.is_document {
-            "Documents"
-        } else {
-            "Code"
-        };
         let visible_lines = if language.is_document {
             language.document_lines
         } else {
@@ -723,21 +707,16 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
         } else {
             COLOR_CODE
         };
-        let share = percentage(language.total_lines, total);
         lines.push(Line::from(vec![
-            Span::raw(format!("{:<14}", language.name)),
+            Span::raw(format!("{:<24}", language.name)),
             Span::styled(
-                format!("{:>8}", format_count(visible_lines)),
+                format!("{:>12}", format_count(visible_lines)),
                 Style::default().fg(color),
             ),
-            Span::raw("  "),
-            Span::styled(format!("{share:>3}%"), Style::default().fg(COLOR_TITLE)),
-            Span::raw("  "),
-            Span::styled(category, Style::default().fg(COLOR_MUTED)),
         ]));
     }
 
-    if lines.len() == 1 {
+    if lines.is_empty() {
         lines.push(Line::from("No languages found"));
     }
 
@@ -939,10 +918,6 @@ fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>>
     const MAX_FILES: usize = 8;
     let mut lines = Vec::new();
 
-    if !language.file_stats.is_empty() {
-        lines.push(file_table_header_line());
-    }
-
     for file_stat in language.file_stats.iter().take(MAX_FILES) {
         lines.push(Line::from(format_file_stat(file_stat, root)));
     }
@@ -1095,12 +1070,7 @@ fn report_format_label(format: ReportFormat) -> &'static str {
 
 fn format_file_stat(file_stat: &FileStat, root: &Path) -> String {
     let path = display_path(&file_stat.path, root);
-    format!(
-        "{:<28} {:>8} {:>8}",
-        path,
-        format_count(file_stat.total_lines),
-        format_count(file_stat.code_lines)
-    )
+    format!("{:<36} {:>8}", path, format_count(file_stat.total_lines))
 }
 
 fn display_path(path: &Path, root: &Path) -> String {
@@ -1122,14 +1092,6 @@ fn label_value_line(
     Line::from(vec![
         Span::styled(format!("{label:<16}"), Style::default().fg(COLOR_MUTED)),
         Span::styled(value.into(), Style::default().fg(value_color)),
-    ])
-}
-
-fn file_table_header_line() -> Line<'static> {
-    Line::from(vec![
-        Span::styled(format!("{:<28}", "Path"), Style::default().fg(COLOR_MUTED)),
-        Span::styled(format!("{:>8}", "Total"), Style::default().fg(COLOR_MUTED)),
-        Span::styled(format!("{:>8}", "Code"), Style::default().fg(COLOR_MUTED)),
     ])
 }
 
@@ -1321,9 +1283,8 @@ mod tests {
         assert!(output.contains("lines"));
         assert!(output.contains("█"));
         assert!(output.contains("Top Languages"));
-        assert!(output.contains("Language"));
-        assert!(output.contains("Lines"));
-        assert!(output.contains("Share"));
+        assert!(!output.contains("Language       Lines"));
+        assert!(!output.contains("Share  Type"));
         assert!(output.contains("[Tab]"));
         assert!(output.contains("[r]"));
         assert!(output.contains("[q]"));
@@ -1415,7 +1376,7 @@ mod tests {
         assert!(output.contains("Share"));
         assert!(!output.contains("Metric"));
         assert!(!output.contains("Value"));
-        assert!(output.contains("Path"));
+        assert!(!output.contains("Path"));
         assert!(output.contains("[Enter]"));
     }
 

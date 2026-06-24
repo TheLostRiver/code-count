@@ -145,6 +145,12 @@ The first TUI milestone is Dashboard View.
 - [x] Preserve compact Dashboard summary rendering on narrow terminals.
 - [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
 
+## Milestone 6.14: TUI Visual Polish v0.11
+
+- [x] Simplify Dashboard Top Languages into a mock-style list.
+- [x] Simplify Explorer largest files into path and total rows.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.
