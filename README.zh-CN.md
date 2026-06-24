@@ -66,6 +66,7 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```powershell
 code-count . --ignore-blank
 code-count . --ignore-comments
+code-count . --ignore vendor --ignore generated
 ```
 
 保存扫描快照并比较两次扫描结果：
@@ -83,6 +84,16 @@ code-count report . --format markdown --output report.md
 code-count report . --format html --output report.html --files
 code-count report . --format csv
 ```
+
+临时排除目录时可以使用 `--ignore <path>`，并且可以重复指定：
+
+```powershell
+code-count . --ignore vendor --ignore build
+code-count tui . --ignore generated
+code-count report . --ignore third_party --format markdown
+```
+
+CLI 里的 ignore 路径会和 `code-count.toml` 中的 `ignored_paths` 合并后用于当前运行。
 
 `report` 在没有指定 `--output` 时会输出到 stdout。支持的格式包括
 `json`、`markdown`、`html` 和 `csv`。需要在报告中包含每个文件的明细时，可以加上
@@ -105,7 +116,7 @@ report_format = "markdown"
 
 支持的 TUI 视图包括 `dashboard`、`explorer` 和 `report`。支持的报告格式包括 `json`、`markdown`、`html` 和 `csv`。
 
-`--ignore-blank` 和 `--ignore-comments` 会覆盖配置，在当前运行中禁用对应统计。扫描配置所在项目时，`code-count.toml` 会被自动忽略，不计入统计结果。
+`--ignore-blank`、`--ignore-comments` 和 `--ignore <path>` 会在当前运行中覆盖或扩展配置。扫描配置所在项目时，`code-count.toml` 会被自动忽略，不计入统计结果。
 
 ## 架构
 

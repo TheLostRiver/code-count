@@ -33,6 +33,9 @@ struct Cli {
 
     #[arg(long)]
     ignore_comments: bool,
+
+    #[arg(long = "ignore", value_name = "PATH", global = true)]
+    ignore_paths: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -206,6 +209,9 @@ fn scan_options(cli: &Cli, config: &ProjectConfig) -> ScanOptions {
     let mut ignored_paths = scan_config
         .and_then(|scan| scan.ignored_paths.clone())
         .unwrap_or_default();
+    for ignored_path in &cli.ignore_paths {
+        push_unique(&mut ignored_paths, ignored_path.clone());
+    }
     if let Some(config_file_name) = config
         .config_path
         .as_ref()
@@ -222,6 +228,12 @@ fn scan_options(cli: &Cli, config: &ProjectConfig) -> ScanOptions {
         include_blank_lines,
         include_comments,
         ignored_paths,
+    }
+}
+
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !values.iter().any(|existing| existing == &value) {
+        values.push(value);
     }
 }
 
@@ -424,6 +436,17 @@ mod tests {
             by_language: false,
             ignore_blank: false,
             ignore_comments: false,
+            ignore_paths: Vec::new(),
+        }
+    }
+
+    fn cli_with_ignores(ignored_paths: &[&str]) -> Cli {
+        Cli {
+            ignore_paths: ignored_paths
+                .iter()
+                .map(|path| (*path).to_owned())
+                .collect(),
+            ..cli()
         }
     }
 
@@ -447,6 +470,39 @@ mod tests {
             options.ignored_paths,
             vec!["ignored".to_owned(), "code-count.toml".to_owned()]
         );
+    }
+
+    #[test]
+    fn scan_options_merge_cli_and_config_ignored_paths() {
+        let config = ProjectConfig {
+            scan: Some(ScanConfig {
+                include_blank_lines: None,
+                include_comments: None,
+                ignored_paths: Some(vec!["vendor".to_owned(), "build".to_owned()]),
+            }),
+            tui: None,
+            config_path: Some(PathBuf::from("code-count.toml")),
+        };
+
+        let options = scan_options(&cli_with_ignores(&["build", "generated"]), &config);
+
+        assert_eq!(
+            options.ignored_paths,
+            vec![
+                "vendor".to_owned(),
+                "build".to_owned(),
+                "generated".to_owned(),
+                "code-count.toml".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn tui_command_accepts_global_ignore_paths() {
+        let cli = Cli::try_parse_from(["code-count", "tui", ".", "--ignore", "vendor"])
+            .expect("parse tui ignore");
+
+        assert_eq!(cli.ignore_paths, vec!["vendor".to_owned()]);
     }
 
     #[test]

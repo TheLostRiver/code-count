@@ -64,6 +64,7 @@ Use ignore flags for one-off scans:
 ```powershell
 code-count . --ignore-blank
 code-count . --ignore-comments
+code-count . --ignore vendor --ignore generated
 ```
 
 Save scan snapshots and compare them:
@@ -86,6 +87,18 @@ code-count report . --format csv
 `json`, `markdown`, `html`, and `csv`. Add `--files` when you want per-file
 details in the exported report.
 
+Use `--ignore <path>` for one-off scan exclusions. Repeat it to exclude more
+than one path:
+
+```powershell
+code-count . --ignore vendor --ignore build
+code-count tui . --ignore generated
+code-count report . --ignore third_party --format markdown
+```
+
+CLI ignore paths are merged with `code-count.toml` `ignored_paths` for the
+current run.
+
 ## Project config
 
 Create `code-count.toml` in the project root to set scan and TUI defaults:
@@ -102,10 +115,10 @@ report_format = "markdown"
 ```
 
 Supported TUI views are `dashboard`, `explorer`, and `report`. Supported report
-formats are `json`, `markdown`, `html`, and `csv`. `--ignore-blank` and
-`--ignore-comments` override config by disabling those counts for the current
-run. `code-count.toml` is ignored automatically when scanning the configured
-project.
+formats are `json`, `markdown`, `html`, and `csv`. `--ignore-blank`,
+`--ignore-comments`, and `--ignore <path>` override or extend config for the
+current run. `code-count.toml` is ignored automatically when scanning the
+configured project.
 
 ## Architecture
 

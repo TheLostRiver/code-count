@@ -167,6 +167,21 @@ The first TUI milestone is Dashboard View.
 - [x] Add user PATH install and uninstall scripts.
 - [x] Document portable install in English and Chinese README files.
 
+## Milestone 9: Scan Scope Controls
+
+- [x] Add a repeated `--ignore <path>` CLI option.
+- [x] Merge CLI ignore paths with `code-count.toml` `ignored_paths`.
+- [x] Apply merged ignore paths to CLI, report, history, and TUI scans.
+- [x] Deduplicate ignore paths while preserving user-facing order.
+- [x] Document one-off and config-based ignore workflows.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
+
+## Milestone 10: TUI Scope Assistant
+
+- [ ] Show active ignored paths in the TUI.
+- [ ] Add a scan-scope hint area for noisy directories.
+- [ ] Consider interactive ignore-and-rescan support after CLI scope controls stabilize.
+
 ## Later Ideas
 
 - [x] Scan history and diff between scans.

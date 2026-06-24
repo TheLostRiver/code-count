@@ -2,6 +2,9 @@
 /dist
 .superpowers/
 .planning/
+task_plan.md
+findings.md
+progress.md
 .codex/hooks/
 .codex/hooks.json
 .codex/skills/planning-with-files/

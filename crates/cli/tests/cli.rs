@@ -70,6 +70,30 @@ fn config_file_can_set_scan_defaults_and_ignored_paths() {
 }
 
 #[test]
+fn cli_ignore_option_excludes_paths_for_one_off_scans() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    fs::create_dir(temp_dir.path().join("src")).expect("create src dir");
+    fs::create_dir(temp_dir.path().join("vendor")).expect("create vendor dir");
+    fs::write(
+        temp_dir.path().join("src").join("main.rs"),
+        "fn main() {}\n",
+    )
+    .expect("write counted file");
+    fs::write(
+        temp_dir.path().join("vendor").join("skip.rs"),
+        "fn skipped() {}\n",
+    )
+    .expect("write ignored file");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command.arg(temp_dir.path()).arg("--ignore").arg("vendor");
+
+    command.assert().success().stdout(
+        predicate::str::contains("Files: 1").and(predicate::str::contains("Code lines: 1")),
+    );
+}
+
+#[test]
 fn history_save_writes_snapshot_json() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let snapshot_path = temp_dir.path().join("snapshot.json");
