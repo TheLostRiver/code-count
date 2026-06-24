@@ -69,6 +69,7 @@ pub struct AppState {
     include_report_languages: bool,
     include_report_files: bool,
     report_status: Option<String>,
+    ignored_paths: Vec<String>,
 }
 
 impl AppState {
@@ -77,6 +78,22 @@ impl AppState {
     }
 
     pub fn new_with_options(report: ScanReport, options: TuiOptions) -> Self {
+        Self::new_with_ignored_paths(report, options, Vec::new())
+    }
+
+    pub fn new_with_scan_options(
+        report: ScanReport,
+        options: TuiOptions,
+        scan_options: &ScanOptions,
+    ) -> Self {
+        Self::new_with_ignored_paths(report, options, scan_options.ignored_paths.clone())
+    }
+
+    fn new_with_ignored_paths(
+        report: ScanReport,
+        options: TuiOptions,
+        ignored_paths: Vec<String>,
+    ) -> Self {
         Self {
             report,
             current_view: options.initial_view,
@@ -87,6 +104,7 @@ impl AppState {
             include_report_languages: true,
             include_report_files: false,
             report_status: None,
+            ignored_paths,
         }
     }
 
@@ -253,11 +271,8 @@ pub fn run_with_options(
     }
 
     let mut terminal = ratatui::init();
-    let result = run_app(
-        &mut terminal,
-        AppState::new_with_options(report, tui_options),
-        options,
-    );
+    let state = AppState::new_with_scan_options(report, tui_options, &options);
+    let result = run_app(&mut terminal, state, options);
     ratatui::restore();
 
     result
@@ -349,17 +364,25 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         ])
         .split(area);
 
-    let title = Paragraph::new(Line::from(vec![
+    let mut title_spans = vec![
         Span::styled(command_label(state), Style::default().fg(COLOR_BRAND)),
+        Span::raw("  "),
+        Span::styled(status_label(state), Style::default().fg(COLOR_MUTED)),
+    ];
+    if let Some(scope) = scope_label(state) {
+        title_spans.push(Span::raw("  "));
+        title_spans.push(Span::styled(scope, Style::default().fg(COLOR_DOCS)));
+    }
+    title_spans.extend([
         Span::raw("  "),
         Span::styled(
             state.report.summary.root.display().to_string(),
             Style::default().fg(COLOR_MUTED),
         ),
-        Span::raw("  "),
-        Span::styled(status_label(state), Style::default().fg(COLOR_MUTED)),
-    ]))
-    .block(panel_block(view_title(state.current_view())));
+    ]);
+
+    let title = Paragraph::new(Line::from(title_spans))
+        .block(panel_block(view_title(state.current_view())));
     title.render(chunks[0], buffer);
 
     match state.current_view {
@@ -1136,6 +1159,30 @@ fn status_label(state: &AppState) -> &'static str {
     }
 }
 
+fn scope_label(state: &AppState) -> Option<String> {
+    let visible_paths = state
+        .ignored_paths
+        .iter()
+        .filter(|path| path.as_str() != "code-count.toml")
+        .collect::<Vec<_>>();
+    if visible_paths.is_empty() {
+        return None;
+    }
+
+    let mut label = visible_paths
+        .iter()
+        .take(3)
+        .map(|path| path.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let remaining = visible_paths.len().saturating_sub(3);
+    if remaining > 0 {
+        label.push_str(&format!(" +{remaining}"));
+    }
+
+    Some(format!("ignored: {label}"))
+}
+
 fn key_chip(label: &'static str) -> Span<'static> {
     Span::styled(
         format!("[{label}]"),
@@ -1203,7 +1250,7 @@ mod tests {
     use code_count_core::{ScanOptions, scan_path};
     use ratatui::text::Line;
 
-    use crate::{AppState, AppView, ReportFormat};
+    use crate::{AppState, AppView, ReportFormat, TuiOptions};
 
     fn line_text(line: &Line<'_>) -> String {
         line.spans
@@ -1345,6 +1392,22 @@ mod tests {
         state.set_view(AppView::Report);
         let report = crate::render_to_text(&state, 96, 28);
         assert!(report.contains("- Total: 1,234"));
+    }
+
+    #[test]
+    fn tui_header_shows_active_ignored_paths() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let scan_options = ScanOptions {
+            ignored_paths: vec!["vendor".to_owned(), "build".to_owned()],
+            ..ScanOptions::default()
+        };
+        let state = AppState::new_with_scan_options(report, TuiOptions::default(), &scan_options);
+
+        let output = crate::render_to_text(&state, 96, 28);
+
+        assert!(output.contains("ignored: vendor, build"));
     }
 
     #[test]

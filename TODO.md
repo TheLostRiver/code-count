@@ -178,9 +178,10 @@ The first TUI milestone is Dashboard View.
 
 ## Milestone 10: TUI Scope Assistant
 
-- [ ] Show active ignored paths in the TUI.
-- [ ] Add a scan-scope hint area for noisy directories.
+- [x] Show active ignored paths in the TUI.
+- [x] Add a scan-scope hint area for active ignore rules.
 - [ ] Consider interactive ignore-and-rescan support after CLI scope controls stabilize.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
 
 ## Later Ideas
 
