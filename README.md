@@ -1,5 +1,7 @@
 # code-count
 
+[简体中文](README.zh-CN.md)
+
 `code-count` is a cross-platform code and document line counting tool.
 
 The project starts with a CLI powered by a reusable Rust core library, then adds
