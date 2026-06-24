@@ -321,6 +321,9 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
         KeyCode::Char('f') if state.current_view() == AppView::Report => {
             state.toggle_report_files()
         }
+        KeyCode::Char(' ') if state.current_view() == AppView::Report => {
+            state.toggle_report_files()
+        }
         KeyCode::Char('e') if state.current_view() == AppView::Report => {
             if let Err(error) = export_report(state) {
                 state.set_report_status(format!("Export failed: {error}"));
@@ -1057,30 +1060,24 @@ fn footer_line(state: &AppState) -> Line<'static> {
 
     match state.current_view() {
         AppView::Explorer => Line::from(vec![
-            key_chip("q"),
-            Span::raw(" quit | "),
-            key_chip("r"),
-            Span::raw(" rescan | "),
             key_chip("Up/Down"),
             Span::raw(" select | "),
             key_chip("/"),
             Span::raw(" filter | "),
             key_chip("Tab"),
-            Span::raw(" next view"),
+            Span::raw(" view | "),
+            key_chip("q"),
+            Span::raw(" quit"),
         ]),
         AppView::Report => Line::from(vec![
-            key_chip("q"),
-            Span::raw(" quit | "),
-            key_chip("r"),
-            Span::raw(" rescan | "),
             key_chip("Left/Right"),
             Span::raw(" format | "),
-            key_chip("l"),
-            Span::raw(" languages | "),
-            key_chip("f"),
-            Span::raw(" files | "),
+            key_chip("Space"),
+            Span::raw(" toggle | "),
             key_chip("e"),
-            Span::raw(" export"),
+            Span::raw(" export | "),
+            key_chip("q"),
+            Span::raw(" quit"),
         ]),
         AppView::Dashboard => Line::from(vec![
             key_chip("Tab"),
@@ -1490,6 +1487,13 @@ mod tests {
             &ScanOptions::default(),
         );
         assert!(state.includes_file_details());
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char(' '),
+            &ScanOptions::default(),
+        );
+        assert!(!state.includes_file_details());
     }
 
     #[test]
@@ -1514,6 +1518,7 @@ mod tests {
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));
         assert!(output.contains("Total lines"));
+        assert!(output.contains("[Space]"));
         assert!(output.contains("[e]"));
     }
 
