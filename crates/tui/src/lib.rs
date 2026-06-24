@@ -32,6 +32,8 @@ const COLOR_BRAND: Color = Color::Rgb(125, 207, 255);
 const COLOR_SELECTION: Color = Color::Rgb(31, 39, 58);
 const COLOR_KEY_BG: Color = Color::Rgb(37, 44, 68);
 const COLOR_KEY_TEXT: Color = Color::Rgb(198, 208, 245);
+const BAR_FILL: char = '█';
+const BAR_EMPTY: char = '░';
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
@@ -605,10 +607,10 @@ fn composition_lines(state: &AppState) -> Vec<Line<'static>> {
     let total = state.report.summary.total_lines.max(1);
 
     vec![
-        composition_row("Code", categories.code, total, COLOR_CODE, '#'),
-        composition_row("Comments", categories.comments, total, COLOR_COMMENTS, '='),
-        composition_row("Docs", categories.documents, total, COLOR_DOCS, '+'),
-        composition_row("Blank", categories.blanks, total, COLOR_MUTED, '.'),
+        composition_row("Code", categories.code, total, COLOR_CODE),
+        composition_row("Comments", categories.comments, total, COLOR_COMMENTS),
+        composition_row("Docs", categories.documents, total, COLOR_DOCS),
+        composition_row("Blank", categories.blanks, total, COLOR_MUTED),
     ]
 }
 
@@ -661,23 +663,24 @@ fn language_lines(state: &AppState) -> Vec<Line<'static>> {
     lines
 }
 
-fn composition_row(
-    label: &'static str,
-    value: usize,
-    total: usize,
-    color: Color,
-    fill: char,
-) -> Line<'static> {
+fn composition_row(label: &'static str, value: usize, total: usize, color: Color) -> Line<'static> {
     let percent = percentage(value, total);
     let filled = (percent * 20 / 100).max(if value > 0 { 1 } else { 0 });
     let empty = 20usize.saturating_sub(filled);
 
     Line::from(vec![
         Span::styled(format!("{label:<9}"), Style::default().fg(color)),
-        Span::styled(fill.to_string().repeat(filled), Style::default().fg(color)),
-        Span::styled("-".repeat(empty), Style::default().fg(COLOR_MUTED)),
+        Span::styled(
+            BAR_FILL.to_string().repeat(filled),
+            Style::default().fg(color),
+        ),
+        Span::styled(
+            BAR_EMPTY.to_string().repeat(empty),
+            Style::default().fg(COLOR_MUTED),
+        ),
         Span::raw(" "),
         Span::styled(format!("{percent:>3}%"), Style::default().fg(color)),
+        Span::raw(format!("  {value:>6} lines")),
     ])
 }
 
@@ -696,13 +699,22 @@ fn segment_bar(
     let blanks_width = width.saturating_sub(used_width);
 
     Line::from(vec![
-        Span::styled("#".repeat(code_width), Style::default().fg(COLOR_CODE)),
         Span::styled(
-            "=".repeat(comments_width),
+            BAR_FILL.to_string().repeat(code_width),
+            Style::default().fg(COLOR_CODE),
+        ),
+        Span::styled(
+            BAR_FILL.to_string().repeat(comments_width),
             Style::default().fg(COLOR_COMMENTS),
         ),
-        Span::styled("+".repeat(documents_width), Style::default().fg(COLOR_DOCS)),
-        Span::styled(".".repeat(blanks_width), Style::default().fg(COLOR_MUTED)),
+        Span::styled(
+            BAR_FILL.to_string().repeat(documents_width),
+            Style::default().fg(COLOR_DOCS),
+        ),
+        Span::styled(
+            BAR_FILL.to_string().repeat(blanks_width),
+            Style::default().fg(COLOR_MUTED),
+        ),
     ])
 }
 
@@ -1192,6 +1204,8 @@ mod tests {
         assert!(output.contains("Comments"));
         assert!(output.contains("Blank"));
         assert!(output.contains("Composition"));
+        assert!(output.contains("lines"));
+        assert!(output.contains("█"));
         assert!(output.contains("Top Languages"));
         assert!(output.contains("Language"));
         assert!(output.contains("Lines"));
