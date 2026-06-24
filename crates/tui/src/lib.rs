@@ -5,7 +5,11 @@ use std::{
 };
 
 use anyhow::Result;
-use code_count_core::{FileStat, LanguageStat, ScanOptions, ScanReport, scan_path};
+pub use code_count_core::ReportFormat;
+use code_count_core::{
+    FileStat, LanguageStat, ReportRenderOptions, ScanOptions, ScanReport,
+    render_report as render_report_document, report_extension, scan_path,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     Terminal,
@@ -31,39 +35,6 @@ pub enum AppView {
     Dashboard,
     Explorer,
     Report,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReportFormat {
-    Json,
-    Markdown,
-    Csv,
-}
-
-impl ReportFormat {
-    fn next(self) -> Self {
-        match self {
-            Self::Json => Self::Markdown,
-            Self::Markdown => Self::Csv,
-            Self::Csv => Self::Json,
-        }
-    }
-
-    fn previous(self) -> Self {
-        match self {
-            Self::Json => Self::Csv,
-            Self::Markdown => Self::Json,
-            Self::Csv => Self::Markdown,
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::Json => "JSON",
-            Self::Markdown => "Markdown",
-            Self::Csv => "CSV",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -205,11 +176,11 @@ impl AppState {
     }
 
     fn next_report_format(&mut self) {
-        self.report_format = self.report_format.next();
+        self.report_format = next_report_format(self.report_format);
     }
 
     fn previous_report_format(&mut self) {
-        self.report_format = self.report_format.previous();
+        self.report_format = previous_report_format(self.report_format);
     }
 
     fn toggle_report_languages(&mut self) {
@@ -850,7 +821,10 @@ fn report_control_lines(state: &AppState) -> Vec<Line<'static>> {
             "Export",
             Style::default().fg(COLOR_MUTED),
         )]),
-        Line::from(format!("Format {}", state.report_format.label())),
+        Line::from(format!(
+            "Format {}",
+            report_format_label(state.report_format)
+        )),
         Line::from(format!(
             "Language details {}",
             toggle_label(state.include_report_languages)
@@ -943,128 +917,42 @@ fn export_report(state: &mut AppState) -> Result<()> {
 }
 
 fn render_report_export(state: &AppState) -> Result<String> {
-    match state.report_format {
-        ReportFormat::Json => Ok(serde_json::to_string_pretty(&state.report)?),
-        ReportFormat::Markdown => Ok(render_markdown_report(state)),
-        ReportFormat::Csv => Ok(render_csv_report(state)),
-    }
+    let options = ReportRenderOptions {
+        include_language_details: state.include_report_languages,
+        include_file_details: state.include_report_files,
+    };
+
+    Ok(render_report_document(
+        &state.report,
+        state.report_format,
+        &options,
+    )?)
 }
 
-fn render_markdown_report(state: &AppState) -> String {
-    let summary = &state.report.summary;
-    let mut output = String::new();
-
-    output.push_str("# code-count report\n\n");
-    output.push_str(&format!("- Root: {}\n", summary.root.display()));
-    output.push_str(&format!("- Files: {}\n", summary.files));
-    output.push_str(&format!("- Total lines: {}\n", summary.total_lines));
-    output.push_str(&format!("- Code lines: {}\n", summary.code_lines));
-    output.push_str(&format!("- Comment lines: {}\n", summary.comment_lines));
-    output.push_str(&format!("- Document lines: {}\n", summary.document_lines));
-    output.push_str(&format!("- Blank lines: {}\n", summary.blank_lines));
-
-    if state.include_report_languages {
-        output.push_str("\n## Languages\n\n");
-        output.push_str("| Language | Files | Total | Code | Comments | Documents | Blank |\n");
-        output.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
-
-        for language in &state.report.languages {
-            output.push_str(&format!(
-                "| {} | {} | {} | {} | {} | {} | {} |\n",
-                language.name,
-                language.files,
-                language.total_lines,
-                language.code_lines,
-                language.comment_lines,
-                language.document_lines,
-                language.blank_lines
-            ));
-
-            if state.include_report_files {
-                output.push_str(&format!("\n### {}\n\n", language.name));
-                output.push_str("| File | Total | Code | Comments | Documents | Blank |\n");
-                output.push_str("| --- | ---: | ---: | ---: | ---: | ---: |\n");
-                for file_stat in &language.file_stats {
-                    output.push_str(&format!(
-                        "| {} | {} | {} | {} | {} | {} |\n",
-                        display_path(&file_stat.path, &state.report.summary.root),
-                        file_stat.total_lines,
-                        file_stat.code_lines,
-                        file_stat.comment_lines,
-                        file_stat.document_lines,
-                        file_stat.blank_lines
-                    ));
-                }
-                output.push('\n');
-            }
-        }
-    }
-
-    output
-}
-
-fn render_csv_report(state: &AppState) -> String {
-    let mut output = String::new();
-    output.push_str("kind,name,files,total,code,comments,documents,blank\n");
-
-    let summary = &state.report.summary;
-    output.push_str(&format!(
-        "summary,{},{},{},{},{},{},{}\n",
-        csv_escape(&summary.root.display().to_string()),
-        summary.files,
-        summary.total_lines,
-        summary.code_lines,
-        summary.comment_lines,
-        summary.document_lines,
-        summary.blank_lines
-    ));
-
-    if state.include_report_languages {
-        for language in &state.report.languages {
-            output.push_str(&format!(
-                "language,{},{},{},{},{},{},{}\n",
-                csv_escape(&language.name),
-                language.files,
-                language.total_lines,
-                language.code_lines,
-                language.comment_lines,
-                language.document_lines,
-                language.blank_lines
-            ));
-
-            if state.include_report_files {
-                for file_stat in &language.file_stats {
-                    output.push_str(&format!(
-                        "file,{},{},{},{},{},{},{}\n",
-                        csv_escape(&display_path(&file_stat.path, &state.report.summary.root)),
-                        1,
-                        file_stat.total_lines,
-                        file_stat.code_lines,
-                        file_stat.comment_lines,
-                        file_stat.document_lines,
-                        file_stat.blank_lines
-                    ));
-                }
-            }
-        }
-    }
-
-    output
-}
-
-fn csv_escape(value: &str) -> String {
-    if value.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_owned()
-    }
-}
-
-fn report_extension(format: ReportFormat) -> &'static str {
+fn next_report_format(format: ReportFormat) -> ReportFormat {
     match format {
-        ReportFormat::Json => "json",
-        ReportFormat::Markdown => "md",
-        ReportFormat::Csv => "csv",
+        ReportFormat::Json => ReportFormat::Markdown,
+        ReportFormat::Markdown => ReportFormat::Html,
+        ReportFormat::Html => ReportFormat::Csv,
+        ReportFormat::Csv => ReportFormat::Json,
+    }
+}
+
+fn previous_report_format(format: ReportFormat) -> ReportFormat {
+    match format {
+        ReportFormat::Json => ReportFormat::Csv,
+        ReportFormat::Markdown => ReportFormat::Json,
+        ReportFormat::Html => ReportFormat::Markdown,
+        ReportFormat::Csv => ReportFormat::Html,
+    }
+}
+
+fn report_format_label(format: ReportFormat) -> &'static str {
+    match format {
+        ReportFormat::Json => "JSON",
+        ReportFormat::Markdown => "Markdown",
+        ReportFormat::Html => "HTML",
+        ReportFormat::Csv => "CSV",
     }
 }
 
@@ -1470,6 +1358,13 @@ mod tests {
             crossterm::event::KeyCode::Right,
             &ScanOptions::default(),
         );
+        assert_eq!(state.report_format(), ReportFormat::Html);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Right,
+            &ScanOptions::default(),
+        );
         assert_eq!(state.report_format(), ReportFormat::Csv);
 
         crate::handle_key(
@@ -1477,7 +1372,7 @@ mod tests {
             crossterm::event::KeyCode::Left,
             &ScanOptions::default(),
         );
-        assert_eq!(state.report_format(), ReportFormat::Markdown);
+        assert_eq!(state.report_format(), ReportFormat::Html);
 
         crate::handle_key(
             &mut state,
@@ -1531,6 +1426,12 @@ mod tests {
         assert!(markdown.contains("## Languages"));
         assert!(markdown.contains("### Rust"));
         assert!(markdown.contains("main.rs"));
+
+        state.next_report_format();
+        let html = crate::render_report_export(&state).expect("render html report");
+        assert!(html.contains("<!doctype html>"));
+        assert!(html.contains("<td>Rust</td>"));
+        assert!(html.contains("main.rs"));
 
         state.next_report_format();
         let csv = crate::render_report_export(&state).expect("render csv report");

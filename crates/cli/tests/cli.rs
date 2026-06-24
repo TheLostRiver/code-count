@@ -141,3 +141,80 @@ fn diff_prints_summary_and_language_deltas_between_snapshots() {
             .and(predicate::str::contains("+2")),
     );
 }
+
+#[test]
+fn report_command_writes_markdown_report_file() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let output_path = temp_dir.path().join("reports").join("report.md");
+    fs::write(
+        temp_dir.path().join("main.rs"),
+        "fn main() {\n    println!(\"hello\");\n}\n",
+    )
+    .expect("write rust file");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command
+        .arg("report")
+        .arg(temp_dir.path())
+        .arg("--format")
+        .arg("markdown")
+        .arg("--output")
+        .arg(&output_path);
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Saved report"));
+
+    let report = fs::read_to_string(&output_path).expect("read report file");
+    assert!(report.contains("# code-count report"));
+    assert!(report.contains("| Rust |"));
+}
+
+#[test]
+fn report_command_writes_html_report_with_file_details() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let output_path = temp_dir.path().join("report.html");
+    fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+    fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command
+        .arg("report")
+        .arg(temp_dir.path())
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--files");
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Saved report"));
+
+    let report = fs::read_to_string(&output_path).expect("read report file");
+    assert!(report.contains("<!doctype html>"));
+    assert!(report.contains("<td>Rust</td>"));
+    assert!(report.contains("main.rs"));
+    assert!(report.contains("README.md"));
+}
+
+#[test]
+fn report_command_prints_csv_to_stdout() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command
+        .arg("report")
+        .arg(temp_dir.path())
+        .arg("--format")
+        .arg("csv");
+
+    command.assert().success().stdout(
+        predicate::str::contains("kind,name,files,total,code,comments,documents,blank")
+            .and(predicate::str::contains("summary,"))
+            .and(predicate::str::contains("language,Rust")),
+    );
+}

@@ -12,7 +12,7 @@
 
 - 统计源码文件、脚本、Markdown 和纯文本文档。
 - 报告总行数、代码行、注释行、文档行和空白行。
-- 支持普通文本输出、JSON 输出、按语言统计、TUI 和扫描快照 diff。
+- 支持普通文本输出、JSON 输出、按语言统计、Markdown/HTML 报告、TUI 和扫描快照 diff。
 - 保持 core 扫描器可被 CLI、TUI 和未来桌面 GUI 复用。
 
 ## 使用方式
@@ -21,6 +21,8 @@
 code-count .
 code-count . --json
 code-count . --by-language
+code-count report . --format markdown --output report.md
+code-count report . --format html --output report.html --files
 code-count tui .
 ```
 
@@ -74,6 +76,18 @@ code-count history save . --output after.json
 code-count diff before.json after.json
 ```
 
+导出可分享的报告：
+
+```powershell
+code-count report . --format markdown --output report.md
+code-count report . --format html --output report.html --files
+code-count report . --format csv
+```
+
+`report` 在没有指定 `--output` 时会输出到 stdout。支持的格式包括
+`json`、`markdown`、`html` 和 `csv`。需要在报告中包含每个文件的明细时，可以加上
+`--files`。
+
 ## 项目配置
 
 在项目根目录创建 `code-count.toml`，可以设置扫描和 TUI 默认值：
@@ -89,7 +103,7 @@ default_view = "dashboard"
 report_format = "json"
 ```
 
-支持的 TUI 视图包括 `dashboard`、`explorer` 和 `report`。支持的报告格式包括 `json`、`markdown` 和 `csv`。
+支持的 TUI 视图包括 `dashboard`、`explorer` 和 `report`。支持的报告格式包括 `json`、`markdown`、`html` 和 `csv`。
 
 `--ignore-blank` 和 `--ignore-comments` 会覆盖配置，在当前运行中禁用对应统计。扫描配置所在项目时，`code-count.toml` 会被自动忽略，不计入统计结果。
 
@@ -116,7 +130,8 @@ crates/tui
 4. Explorer 和 Report 视图。
 5. `code-count.toml` 项目配置。
 6. 扫描历史快照和 diff。
-7. 桌面 GUI 原型。
+7. Markdown 和 HTML 报告模板。
+8. 桌面 GUI 原型。
 
 ## 开发
 

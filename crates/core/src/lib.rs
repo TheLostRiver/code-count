@@ -6,6 +6,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tokei::{Config, LanguageType, Languages, Report};
 
+mod report;
+
+pub use report::{
+    ReportFormat, ReportRenderError, ReportRenderOptions, render_report, report_extension,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanOptions {
     pub include_blank_lines: bool,
@@ -361,6 +367,7 @@ fn file_stat_from_report(report: &Report, is_document: bool, options: &ScanOptio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ReportFormat, ReportRenderOptions, render_report, report_extension};
     use std::fs;
 
     #[test]
@@ -575,6 +582,65 @@ mod tests {
         assert_eq!(python.code_lines, 4);
     }
 
+    #[test]
+    fn report_renderer_outputs_markdown_with_language_and_file_details() {
+        let report = report_with_file_details();
+        let options = ReportRenderOptions {
+            include_language_details: true,
+            include_file_details: true,
+        };
+
+        let output =
+            render_report(&report, ReportFormat::Markdown, &options).expect("render markdown");
+
+        assert!(output.contains("# code-count report"));
+        assert!(output.contains("- Root: sample"));
+        assert!(
+            output.contains("| Language | Files | Total | Code | Comments | Documents | Blank |")
+        );
+        assert!(output.contains("| Rust | 1 | 5 | 3 | 1 | 0 | 1 |"));
+        assert!(output.contains("### Rust"));
+        assert!(output.contains("| src/main.rs | 5 | 3 | 1 | 0 | 1 |"));
+    }
+
+    #[test]
+    fn report_renderer_outputs_html_with_escaped_file_details() {
+        let report = report_with_file_details();
+        let options = ReportRenderOptions {
+            include_language_details: true,
+            include_file_details: true,
+        };
+
+        let output = render_report(&report, ReportFormat::Html, &options).expect("render html");
+
+        assert!(output.contains("<!doctype html>"));
+        assert!(output.contains("<title>code-count report</title>"));
+        assert!(output.contains("<h1>code-count report</h1>"));
+        assert!(output.contains("<td>Rust</td>"));
+        assert!(output.contains("<td>src/main.rs</td>"));
+        assert!(output.contains("<td>docs/notes &amp; plan.md</td>"));
+        assert!(output.contains("class=\"metric\""));
+    }
+
+    #[test]
+    fn report_renderer_outputs_csv_and_extensions() {
+        let report = report_with_file_details();
+        let options = ReportRenderOptions {
+            include_language_details: true,
+            include_file_details: true,
+        };
+
+        let output = render_report(&report, ReportFormat::Csv, &options).expect("render csv");
+
+        assert!(output.contains("kind,name,files,total,code,comments,documents,blank"));
+        assert!(output.contains("summary,sample,2,8,3,1,2,2"));
+        assert!(output.contains("language,Rust,1,5,3,1,0,1"));
+        assert!(output.contains("file,src/main.rs,1,5,3,1,0,1"));
+        assert_eq!(report_extension(ReportFormat::Markdown), "md");
+        assert_eq!(report_extension(ReportFormat::Html), "html");
+        assert_eq!(report_extension(ReportFormat::Csv), "csv");
+    }
+
     fn report_with_languages(languages: &[LanguageStat]) -> ScanReport {
         let mut summary = ScanSummary {
             root: PathBuf::from("sample"),
@@ -631,6 +697,64 @@ mod tests {
             code_lines,
             is_document: document_lines > 0,
             file_stats: Vec::new(),
+        }
+    }
+
+    fn report_with_file_details() -> ScanReport {
+        ScanReport {
+            summary: ScanSummary {
+                root: PathBuf::from("sample"),
+                files: 2,
+                total_lines: 8,
+                blank_lines: 2,
+                comment_lines: 1,
+                document_lines: 2,
+                code_lines: 3,
+            },
+            categories: LineCategories {
+                code: 3,
+                comments: 1,
+                documents: 2,
+                blanks: 2,
+            },
+            languages: vec![
+                LanguageStat {
+                    name: "Rust".to_owned(),
+                    files: 1,
+                    total_lines: 5,
+                    blank_lines: 1,
+                    comment_lines: 1,
+                    document_lines: 0,
+                    code_lines: 3,
+                    is_document: false,
+                    file_stats: vec![FileStat {
+                        path: PathBuf::from("sample/src/main.rs"),
+                        total_lines: 5,
+                        blank_lines: 1,
+                        comment_lines: 1,
+                        document_lines: 0,
+                        code_lines: 3,
+                    }],
+                },
+                LanguageStat {
+                    name: "Markdown".to_owned(),
+                    files: 1,
+                    total_lines: 3,
+                    blank_lines: 1,
+                    comment_lines: 0,
+                    document_lines: 2,
+                    code_lines: 0,
+                    is_document: true,
+                    file_stats: vec![FileStat {
+                        path: PathBuf::from("sample/docs/notes & plan.md"),
+                        total_lines: 3,
+                        blank_lines: 1,
+                        comment_lines: 0,
+                        document_lines: 2,
+                        code_lines: 0,
+                    }],
+                },
+            ],
         }
     }
 }

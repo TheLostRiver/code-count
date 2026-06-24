@@ -343,6 +343,7 @@ name = "code-count-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "tempfile",
  "tokei",
 ]
@@ -355,7 +356,6 @@ dependencies = [
  "code-count-core",
  "crossterm",
  "ratatui",
- "serde_json",
  "tempfile",
 ]
 

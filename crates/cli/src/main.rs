@@ -6,10 +6,10 @@ use std::{
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use code_count_core::{
-    LanguageDelta, LanguageStat, LineDelta, ScanOptions, ScanReport, ScanSummary, diff_reports,
-    scan_path,
+    LanguageDelta, LanguageStat, LineDelta, ReportFormat, ReportRenderOptions, ScanOptions,
+    ScanReport, ScanSummary, diff_reports, render_report, scan_path,
 };
-use code_count_tui::{AppView, ReportFormat, TuiOptions};
+use code_count_tui::{AppView, ReportFormat as TuiReportFormat, TuiOptions};
 use serde::Deserialize;
 
 #[derive(Debug, Parser)]
@@ -40,6 +40,19 @@ enum Command {
     Tui {
         #[arg(default_value = ".")]
         path: PathBuf,
+    },
+    Report {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        #[arg(long)]
+        files: bool,
     },
     History {
         #[command(subcommand)]
@@ -94,6 +107,25 @@ fn main() -> Result<()> {
             let report = scan_path(path, &options);
             let tui_options = tui_options(&config)?;
             return code_count_tui::run_with_options(report, options, tui_options);
+        }
+        Some(Command::Report {
+            path,
+            format,
+            output,
+            files,
+        }) => {
+            ensure_path_exists(path)?;
+            let config = load_project_config(path)?;
+            let options = scan_options(&cli, &config);
+            let report = scan_path(path, &options);
+            let report_format = parse_cli_report_format(format)?;
+            let render_options = ReportRenderOptions {
+                include_language_details: true,
+                include_file_details: *files,
+            };
+            let contents = render_report(&report, report_format, &render_options)?;
+            write_report_output(&contents, output.as_deref())?;
+            return Ok(());
         }
         Some(Command::History {
             command: HistoryCommand::Save { path, output },
@@ -203,7 +235,7 @@ fn tui_options(config: &ProjectConfig) -> Result<TuiOptions> {
         None => TuiOptions::default().initial_view,
     };
     let report_format = match tui_config.report_format.as_deref() {
-        Some(value) => parse_report_format(value)?,
+        Some(value) => parse_tui_report_format(value)?,
         None => TuiOptions::default().report_format,
     };
 
@@ -222,12 +254,23 @@ fn parse_app_view(value: &str) -> Result<AppView> {
     }
 }
 
-fn parse_report_format(value: &str) -> Result<ReportFormat> {
+fn parse_tui_report_format(value: &str) -> Result<TuiReportFormat> {
+    match value.to_ascii_lowercase().as_str() {
+        "json" => Ok(TuiReportFormat::Json),
+        "markdown" | "md" => Ok(TuiReportFormat::Markdown),
+        "html" => Ok(TuiReportFormat::Html),
+        "csv" => Ok(TuiReportFormat::Csv),
+        _ => bail!("invalid tui.report_format: {value}; expected json, markdown, html, or csv"),
+    }
+}
+
+fn parse_cli_report_format(value: &str) -> Result<ReportFormat> {
     match value.to_ascii_lowercase().as_str() {
         "json" => Ok(ReportFormat::Json),
         "markdown" | "md" => Ok(ReportFormat::Markdown),
+        "html" => Ok(ReportFormat::Html),
         "csv" => Ok(ReportFormat::Csv),
-        _ => bail!("invalid tui.report_format: {value}; expected json, markdown, or csv"),
+        _ => bail!("invalid report format: {value}; expected json, markdown, html, or csv"),
     }
 }
 
@@ -248,6 +291,23 @@ fn save_snapshot(report: &ScanReport, output: &Path) -> Result<()> {
 
     fs::write(output, serde_json::to_string_pretty(report)?)?;
     println!("Saved snapshot: {}", output.display());
+    Ok(())
+}
+
+fn write_report_output(contents: &str, output: Option<&Path>) -> Result<()> {
+    let Some(output) = output else {
+        println!("{contents}");
+        return Ok(());
+    };
+
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(output, contents)?;
+    println!("Saved report: {}", output.display());
     Ok(())
 }
 
