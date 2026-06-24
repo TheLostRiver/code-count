@@ -924,30 +924,6 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
         Line::from(format!("- Docs: {}", format_count(summary.document_lines))),
     ];
 
-    if state.include_report_languages {
-        lines.push(Line::from(format!(
-            "Languages included {}",
-            format_count(state.report.languages.len())
-        )));
-    } else {
-        lines.push(Line::from("Languages included no"));
-    }
-
-    if state.include_report_files {
-        let file_count: usize = state
-            .report
-            .languages
-            .iter()
-            .map(|language| language.file_stats.len())
-            .sum();
-        lines.push(Line::from(format!(
-            "Files included {}",
-            format_count(file_count)
-        )));
-    } else {
-        lines.push(Line::from("Files included no"));
-    }
-
     if let Some(status) = &state.report_status {
         lines.push(Line::from(""));
         lines.push(Line::from(status.clone()));
@@ -964,11 +940,6 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
             COLOR_CODE,
         ),
         label_value_line("Target", report_output_file_name(state), COLOR_TITLE),
-        label_value_line(
-            "File details",
-            toggle_label(state.include_report_files),
-            COLOR_TITLE,
-        ),
     ];
 
     if let Some(status) = &state.report_status {
@@ -976,10 +947,6 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
     }
 
     lines
-}
-
-fn toggle_label(enabled: bool) -> &'static str {
-    if enabled { "on" } else { "off" }
 }
 
 fn report_output_path(state: &AppState) -> std::path::PathBuf {
@@ -1166,8 +1133,6 @@ fn footer_line(state: &AppState) -> Line<'static> {
             Span::raw(" quit"),
         ]),
         AppView::Report => Line::from(vec![
-            key_chip("Left/Right"),
-            Span::raw(" format | "),
             key_chip("Space"),
             Span::raw(" toggle | "),
             key_chip("e"),
@@ -1693,7 +1658,7 @@ mod tests {
         assert!(output.contains("Target"));
         assert!(output.contains("Markdown"));
         assert!(output.contains("code-count-report.md"));
-        assert!(output.contains("File details"));
+        assert!(!output.contains("File details"));
         assert!(!output.contains("Options"));
         assert!(!output.contains("Export ready"));
         assert!(!output.contains("Ready"));
@@ -1707,6 +1672,23 @@ mod tests {
         assert!(!output.contains("Total lines"));
         assert!(output.contains("[Space]"));
         assert!(output.contains("[e]"));
+        assert!(!output.contains("[Left/Right]"));
+    }
+
+    #[test]
+    fn report_preview_stays_summary_only_on_tall_terminals() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Report);
+
+        let output = crate::render_to_text(&state, 96, 36);
+
+        assert!(output.contains("- Total:"));
+        assert!(!output.contains("Languages included"));
+        assert!(!output.contains("Files included"));
     }
 
     #[test]

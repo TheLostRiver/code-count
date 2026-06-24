@@ -131,6 +131,13 @@ The first TUI milestone is Dashboard View.
 - [x] Reduce Report Export metadata to the mock-focused essentials.
 - [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
 
+## Milestone 6.12: TUI Visual Polish v0.9
+
+- [x] Keep Report preview summary-only even on taller terminals.
+- [x] Reduce Report Export to Format and Target rows before export.
+- [x] Tighten Report footer hints toward the mock.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.
