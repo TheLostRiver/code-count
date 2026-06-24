@@ -95,6 +95,8 @@ code-count report . --ignore third_party --format markdown
 
 CLI 里的 ignore 路径会和 `code-count.toml` 中的 `ignored_paths` 合并后用于当前运行。
 
+在 TUI 的 Explorer 视图里，Details 面板会根据当前报告中行数最多的顶层目录显示扫描范围建议。按 `i` 可以把最上方建议加入本次会话的 ignore 列表并重新扫描；这个操作不会写入 `code-count.toml`。
+
 `report` 在没有指定 `--output` 时会输出到 stdout。支持的格式包括
 `json`、`markdown`、`html` 和 `csv`。需要在报告中包含每个文件的明细时，可以加上
 `--files`。

@@ -99,6 +99,11 @@ code-count report . --ignore third_party --format markdown
 CLI ignore paths are merged with `code-count.toml` `ignored_paths` for the
 current run.
 
+In the TUI Explorer view, the Details panel shows scan-scope suggestions based
+on the largest top-level directories in the current report. Press `i` to add the
+top suggestion to the current session's ignore list and rescan. This does not
+write to `code-count.toml`.
+
 ## Project config
 
 Create `code-count.toml` in the project root to set scan and TUI defaults:
