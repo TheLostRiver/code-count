@@ -190,6 +190,15 @@ The first TUI milestone is Dashboard View.
 - [x] Add Explorer status feedback and undo for session-scoped ignores.
 - [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
 
+## Milestone 11: CLI + TUI Product Polish
+
+- [x] Add `code-count init .` for safe project config creation.
+- [x] Protect existing config files unless `--force` is used.
+- [x] Let TUI Explorer save active ignored paths to `code-count.toml`.
+- [x] Avoid writing empty scope config when no ignored paths are active.
+- [x] Keep invalid existing config files untouched when TUI scope save fails.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
+
 ## Later Ideas
 
 - [x] Scan history and diff between scans.

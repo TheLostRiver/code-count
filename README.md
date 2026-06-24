@@ -25,6 +25,7 @@ model and user experience.
 code-count .
 code-count . --json
 code-count . --by-language
+code-count init .
 code-count report . --format markdown --output report.md
 code-count report . --format html --output report.html --files
 code-count tui .
@@ -102,17 +103,24 @@ current run.
 In the TUI Explorer view, the Details panel shows scan-scope suggestions based
 on the largest top-level directories in the current report. Press `i` to add the
 top suggestion to the current session's ignore list and rescan. Press `u` to
-undo the last session ignore. These actions do not write to `code-count.toml`.
+undo the last session ignore. Press `w` to save the active ignored paths to
+`code-count.toml`.
 
 ## Project config
 
 Create `code-count.toml` in the project root to set scan and TUI defaults:
 
+```powershell
+code-count init .
+```
+
+Use `code-count init . --force` to replace an existing config.
+
 ```toml
 [scan]
 include_blank_lines = true
 include_comments = true
-ignored_paths = ["target", ".git", "node_modules"]
+ignored_paths = ["target", ".git", "node_modules", "dist", "build", "vendor"]
 
 [tui]
 default_view = "dashboard"
