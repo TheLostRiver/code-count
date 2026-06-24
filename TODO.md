@@ -82,7 +82,7 @@ The first TUI milestone is Dashboard View.
 - [x] Run `cargo test`.
 - [x] Run `cargo clippy`.
 - [x] Manually test the CLI on Windows.
-- [ ] Manually test the TUI in Windows Terminal.
+- [x] Manually test the TUI in Windows Terminal.
 - [x] Add CI for Windows, macOS, and Linux when the CLI stabilizes.
 
 ## Later Ideas
