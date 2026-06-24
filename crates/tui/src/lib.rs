@@ -136,12 +136,21 @@ impl AppState {
             return;
         }
 
-        self.selected_language_index =
-            (self.selected_language_index + 1).min(language_count.saturating_sub(1));
+        self.selected_language_index = (self.selected_language_index + 1) % language_count;
     }
 
     pub fn select_previous_language(&mut self) {
-        self.selected_language_index = self.selected_language_index.saturating_sub(1);
+        let language_count = self.filtered_languages().len();
+        if language_count == 0 {
+            self.selected_language_index = 0;
+            return;
+        }
+
+        self.selected_language_index = if self.selected_language_index == 0 {
+            language_count.saturating_sub(1)
+        } else {
+            self.selected_language_index.saturating_sub(1)
+        };
     }
 
     pub fn set_language_filter(&mut self, filter: impl Into<String>) {
@@ -1121,6 +1130,42 @@ mod tests {
         state.select_previous_language();
         assert_eq!(
             state.selected_language().expect("selected language").name,
+            first_language
+        );
+    }
+
+    #[test]
+    fn explorer_selection_wraps_at_language_list_edges() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
+        fs::write(temp_dir.path().join("script.py"), "print('hello')\n")
+            .expect("write python file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        assert_eq!(state.filtered_languages().len(), 3);
+
+        let first_language = state
+            .selected_language()
+            .expect("initial selected language")
+            .name
+            .clone();
+
+        state.select_previous_language();
+        let last_language = state
+            .selected_language()
+            .expect("wrapped previous language")
+            .name
+            .clone();
+
+        assert_ne!(first_language, last_language);
+
+        state.select_next_language();
+        assert_eq!(
+            state
+                .selected_language()
+                .expect("wrapped next language")
+                .name,
             first_language
         );
     }
