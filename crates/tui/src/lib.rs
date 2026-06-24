@@ -515,9 +515,9 @@ fn render_report_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9),
-            Constraint::Min(8),
-            Constraint::Length(5),
+            Constraint::Length(8),
+            Constraint::Min(7),
+            Constraint::Length(7),
         ])
         .split(area);
 
@@ -530,9 +530,9 @@ fn render_report_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9),
-            Constraint::Min(8),
-            Constraint::Length(5),
+            Constraint::Length(8),
+            Constraint::Min(7),
+            Constraint::Length(7),
         ])
         .split(area);
 
@@ -830,17 +830,15 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
             "Breakdown",
             Style::default().fg(COLOR_MUTED),
         )]),
-        Line::from(format!("Category {}", category)),
-        Line::from(format!("Project Share {}%", share)),
-        Line::from(format!("Files {}", format_count(language.files))),
-        Line::from(format!("Total {}", format_count(language.total_lines))),
-        Line::from(format!("Code {}", format_count(language.code_lines))),
-        Line::from(format!("Comments {}", format_count(language.comment_lines))),
-        Line::from(format!(
-            "Documents {}",
-            format_count(language.document_lines)
-        )),
-        Line::from(format!("Blank {}", format_count(language.blank_lines))),
+        metric_header_line(),
+        metric_line("Category", category),
+        metric_line("Project Share", format!("{share}%")),
+        metric_line("Files", format_count(language.files)),
+        metric_line("Total", format_count(language.total_lines)),
+        metric_line("Code", format_count(language.code_lines)),
+        metric_line("Comments", format_count(language.comment_lines)),
+        metric_line("Documents", format_count(language.document_lines)),
+        metric_line("Blank", format_count(language.blank_lines)),
         Line::from(""),
         Line::from(vec![Span::styled(
             "Largest files",
@@ -855,6 +853,10 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
 fn file_detail_lines(language: &LanguageStat, root: &Path) -> Vec<Line<'static>> {
     const MAX_FILES: usize = 8;
     let mut lines = Vec::new();
+
+    if !language.file_stats.is_empty() {
+        lines.push(file_table_header_line());
+    }
 
     for file_stat in language.file_stats.iter().take(MAX_FILES) {
         lines.push(Line::from(format_file_stat(file_stat, root)));
@@ -903,9 +905,7 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
             "# Project Line Report",
             Style::default().fg(COLOR_TITLE),
         )]),
-        Line::from(format!("- Root: {}", summary.root.display())),
-        Line::from(format!("Target {}", report_output_path(state).display())),
-        Line::from(""),
+        Line::from(format!("Target {}", report_output_file_name(state))),
         Line::from(format!("- Files: {}", format_count(summary.files))),
         Line::from(format!(
             "- Total lines: {}",
@@ -927,6 +927,8 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
             "- Blank lines: {}",
             format_count(summary.blank_lines)
         )),
+        Line::from(""),
+        Line::from(format!("- Root: {}", summary.root.display())),
         Line::from(""),
     ];
 
@@ -964,39 +966,35 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
 
 fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
     let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Format", Style::default().fg(COLOR_MUTED)),
-            Span::raw(" "),
-            Span::styled(
-                report_format_label(state.report_format),
-                Style::default().fg(COLOR_CODE),
+        label_value_line(
+            "Format",
+            report_format_label(state.report_format),
+            COLOR_CODE,
+        ),
+        label_value_line("Output target", report_output_file_name(state), COLOR_TITLE),
+        label_value_line(
+            "Options",
+            format!(
+                "Language details {}",
+                toggle_label(state.include_report_languages)
             ),
-            Span::raw("   "),
-            Span::styled("Target", Style::default().fg(COLOR_MUTED)),
-            Span::raw(" "),
-            Span::styled(
-                report_output_path(state).display().to_string(),
-                Style::default().fg(COLOR_TITLE),
-            ),
-        ]),
-        Line::from(format!(
-            "Options  Language details {}   File details {}",
-            toggle_label(state.include_report_languages),
-            toggle_label(state.include_report_files)
-        )),
+            COLOR_TITLE,
+        ),
+        label_value_line(
+            "File details",
+            toggle_label(state.include_report_files),
+            COLOR_TITLE,
+        ),
     ];
 
     if let Some(status) = &state.report_status {
         lines.push(Line::from(status.clone()));
     } else {
-        lines.push(Line::from(vec![
-            Span::styled("Export ready", Style::default().fg(COLOR_MUTED)),
-            Span::raw(" "),
-            Span::styled(
-                report_extension(state.report_format),
-                Style::default().fg(COLOR_TITLE),
-            ),
-        ]));
+        lines.push(label_value_line(
+            "Ready",
+            format!("Export ready {}", report_extension(state.report_format)),
+            COLOR_TITLE,
+        ));
     }
 
     lines
@@ -1011,6 +1009,14 @@ fn report_output_path(state: &AppState) -> std::path::PathBuf {
         "code-count-report.{}",
         report_extension(state.report_format)
     ))
+}
+
+fn report_output_file_name(state: &AppState) -> String {
+    report_output_path(state)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("code-count-report")
+        .to_owned()
 }
 
 fn export_report(state: &mut AppState) -> Result<()> {
@@ -1070,7 +1076,7 @@ fn report_format_label(format: ReportFormat) -> &'static str {
 fn format_file_stat(file_stat: &FileStat, root: &Path) -> String {
     let path = display_path(&file_stat.path, root);
     format!(
-        "{:<28} total {:>5} code {:>5}",
+        "{:<28} {:>8} {:>8}",
         path,
         format_count(file_stat.total_lines),
         format_count(file_stat.code_lines)
@@ -1082,6 +1088,39 @@ fn display_path(path: &Path, root: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+fn metric_header_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!("{:<16}", "Metric"),
+            Style::default().fg(COLOR_MUTED),
+        ),
+        Span::styled("Value", Style::default().fg(COLOR_MUTED)),
+    ])
+}
+
+fn metric_line(label: &'static str, value: impl Into<String>) -> Line<'static> {
+    label_value_line(label, value, COLOR_TITLE)
+}
+
+fn label_value_line(
+    label: &'static str,
+    value: impl Into<String>,
+    value_color: Color,
+) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{label:<16}"), Style::default().fg(COLOR_MUTED)),
+        Span::styled(value.into(), Style::default().fg(value_color)),
+    ])
+}
+
+fn file_table_header_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{:<28}", "Path"), Style::default().fg(COLOR_MUTED)),
+        Span::styled(format!("{:>8}", "Total"), Style::default().fg(COLOR_MUTED)),
+        Span::styled(format!("{:>8}", "Code"), Style::default().fg(COLOR_MUTED)),
+    ])
 }
 
 fn percentage(value: usize, total: usize) -> usize {
@@ -1301,7 +1340,8 @@ mod tests {
 
         state.set_view(AppView::Explorer);
         let explorer = crate::render_to_text(&state, 96, 28);
-        assert!(explorer.contains("Total 1,234"));
+        assert!(explorer.contains("Total"));
+        assert!(explorer.contains("1,234"));
 
         state.set_view(AppView::Report);
         let report = crate::render_to_text(&state, 96, 28);
@@ -1338,6 +1378,9 @@ mod tests {
         assert!(output.contains("Share"));
         assert!(output.contains("Project Share"));
         assert!(output.contains("Breakdown"));
+        assert!(output.contains("Metric"));
+        assert!(output.contains("Value"));
+        assert!(output.contains("Path"));
     }
 
     #[test]
@@ -1629,11 +1672,13 @@ mod tests {
         assert!(output.contains("Report"));
         assert!(output.contains("Report sections"));
         assert!(output.contains("Format"));
+        assert!(output.contains("Output target"));
         assert!(output.contains("JSON"));
         assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
         assert!(output.contains("Options"));
         assert!(output.contains("Export ready"));
+        assert!(output.contains("Ready"));
         assert!(output.contains("Preview"));
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));

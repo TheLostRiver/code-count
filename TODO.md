@@ -107,6 +107,15 @@ The first TUI milestone is Dashboard View.
 - [x] Add Explorer detail breakdown and project share labels.
 - [x] Add Report Export ready state.
 
+## Milestone 6.9: TUI Visual Polish v0.6
+
+- [x] Format large TUI counts with thousands separators.
+- [x] Add Explorer detail metric/value rows for denser scanning.
+- [x] Add Explorer file table headers for path, total, and code lines.
+- [x] Keep Report preview focused on target and summary counts first.
+- [x] Split Report export metadata into compact label/value rows.
+- [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.
