@@ -52,7 +52,7 @@ impl Default for TuiOptions {
     fn default() -> Self {
         Self {
             initial_view: AppView::Dashboard,
-            report_format: ReportFormat::Json,
+            report_format: ReportFormat::Markdown,
         }
     }
 }
@@ -440,7 +440,7 @@ fn render_dashboard_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_stats_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let lines = stats_lines(state);
     Paragraph::new(lines)
-        .block(panel_block("Project Dashboard"))
+        .block(panel_block("Summary"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -788,6 +788,26 @@ fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
         lines.push(Line::from("No languages found"));
     }
 
+    if let Some(language) = state.selected_language()
+        && !language.file_stats.is_empty()
+    {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            "Files",
+            Style::default().fg(COLOR_MUTED),
+        )]));
+
+        for file_stat in language.file_stats.iter().take(5) {
+            lines.push(Line::from(vec![
+                Span::styled("> ", Style::default().fg(COLOR_TITLE)),
+                Span::styled(
+                    display_path(&file_stat.path, &state.report.summary.root),
+                    Style::default().fg(COLOR_MUTED),
+                ),
+            ]));
+        }
+    }
+
     lines
 }
 
@@ -799,11 +819,6 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
         ];
     };
 
-    let category = if language.is_document {
-        "Documents"
-    } else {
-        "Code"
-    };
     let share = percentage(
         language.total_lines,
         state.report.summary.total_lines.max(1),
@@ -826,14 +841,8 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
             36,
         ),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "Breakdown",
-            Style::default().fg(COLOR_MUTED),
-        )]),
-        metric_header_line(),
-        metric_line("Category", category),
-        metric_line("Project Share", format!("{share}%")),
         metric_line("Files", format_count(language.files)),
+        metric_line("Share", format!("{share}%")),
         metric_line("Total", format_count(language.total_lines)),
         metric_line("Code", format_count(language.code_lines)),
         metric_line("Comments", format_count(language.comment_lines)),
@@ -905,31 +914,13 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
             "# Project Line Report",
             Style::default().fg(COLOR_TITLE),
         )]),
-        Line::from(format!("Target {}", report_output_file_name(state))),
-        Line::from(format!("- Files: {}", format_count(summary.files))),
+        Line::from(format!("- Total: {}", format_count(summary.total_lines))),
+        Line::from(format!("- Code: {}", format_count(summary.code_lines))),
         Line::from(format!(
-            "- Total lines: {}",
-            format_count(summary.total_lines)
-        )),
-        Line::from(format!(
-            "- Code lines: {}",
-            format_count(summary.code_lines)
-        )),
-        Line::from(format!(
-            "- Comment lines: {}",
+            "- Comments: {}",
             format_count(summary.comment_lines)
         )),
-        Line::from(format!(
-            "- Document lines: {}",
-            format_count(summary.document_lines)
-        )),
-        Line::from(format!(
-            "- Blank lines: {}",
-            format_count(summary.blank_lines)
-        )),
-        Line::from(""),
-        Line::from(format!("- Root: {}", summary.root.display())),
-        Line::from(""),
+        Line::from(format!("- Docs: {}", format_count(summary.document_lines))),
     ];
 
     if state.include_report_languages {
@@ -971,7 +962,7 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
             report_format_label(state.report_format),
             COLOR_CODE,
         ),
-        label_value_line("Output target", report_output_file_name(state), COLOR_TITLE),
+        label_value_line("Target", report_output_file_name(state), COLOR_TITLE),
         label_value_line(
             "Options",
             format!(
@@ -1090,16 +1081,6 @@ fn display_path(path: &Path, root: &Path) -> String {
         .replace('\\', "/")
 }
 
-fn metric_header_line() -> Line<'static> {
-    Line::from(vec![
-        Span::styled(
-            format!("{:<16}", "Metric"),
-            Style::default().fg(COLOR_MUTED),
-        ),
-        Span::styled("Value", Style::default().fg(COLOR_MUTED)),
-    ])
-}
-
 fn metric_line(label: &'static str, value: impl Into<String>) -> Line<'static> {
     label_value_line(label, value, COLOR_TITLE)
 }
@@ -1188,6 +1169,8 @@ fn footer_line(state: &AppState) -> Line<'static> {
         AppView::Explorer => Line::from(vec![
             key_chip("Up/Down"),
             Span::raw(" select | "),
+            key_chip("Enter"),
+            Span::raw(" detail | "),
             key_chip("/"),
             Span::raw(" filter | "),
             key_chip("Tab"),
@@ -1229,8 +1212,16 @@ mod tests {
     use std::fs;
 
     use code_count_core::{ScanOptions, scan_path};
+    use ratatui::text::Line;
 
     use crate::{AppState, AppView, ReportFormat};
+
+    fn line_text(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
 
     #[test]
     fn app_state_starts_on_dashboard_and_cycles_views() {
@@ -1289,6 +1280,7 @@ mod tests {
         assert!(output.contains("A. Project Dashboard"));
         assert!(output.contains("code-count"));
         assert!(output.contains("scan complete"));
+        assert!(output.contains("Summary"));
         assert!(output.contains("Total"));
         assert!(output.contains("Files"));
         assert!(output.contains("code"));
@@ -1345,7 +1337,7 @@ mod tests {
 
         state.set_view(AppView::Report);
         let report = crate::render_to_text(&state, 96, 28);
-        assert!(report.contains("- Total lines: 1,234"));
+        assert!(report.contains("- Total: 1,234"));
     }
 
     #[test]
@@ -1374,13 +1366,33 @@ mod tests {
         assert!(output.contains("Rust"));
         assert!(output.contains("Markdown"));
         assert!(output.contains("Files"));
-        assert!(output.contains("Category"));
         assert!(output.contains("Share"));
-        assert!(output.contains("Project Share"));
-        assert!(output.contains("Breakdown"));
-        assert!(output.contains("Metric"));
-        assert!(output.contains("Value"));
+        assert!(!output.contains("Metric"));
+        assert!(!output.contains("Value"));
         assert!(output.contains("Path"));
+        assert!(output.contains("[Enter]"));
+    }
+
+    #[test]
+    fn explorer_language_panel_lists_files_for_selected_language() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write main rust file");
+        fs::write(
+            temp_dir.path().join("lib.rs"),
+            "pub fn answer() -> usize { 42 }\n",
+        )
+        .expect("write lib rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let state = AppState::new(report);
+
+        let lines: Vec<String> = crate::explorer_language_lines(&state)
+            .iter()
+            .map(line_text)
+            .collect();
+
+        assert!(lines.iter().any(|line| line.trim() == "Files"));
+        assert!(lines.iter().any(|line| line.contains("main.rs")));
+        assert!(lines.iter().any(|line| line.contains("lib.rs")));
     }
 
     #[test]
@@ -1577,11 +1589,11 @@ mod tests {
     }
 
     #[test]
-    fn report_state_defaults_to_json_with_language_details() {
+    fn report_state_defaults_to_markdown_with_language_details() {
         let report = scan_path(".", &ScanOptions::default());
         let state = AppState::new(report);
 
-        assert_eq!(state.report_format(), ReportFormat::Json);
+        assert_eq!(state.report_format(), ReportFormat::Markdown);
         assert!(state.includes_language_details());
         assert!(!state.includes_file_details());
     }
@@ -1612,13 +1624,6 @@ mod tests {
             crossterm::event::KeyCode::Right,
             &ScanOptions::default(),
         );
-        assert_eq!(state.report_format(), ReportFormat::Markdown);
-
-        crate::handle_key(
-            &mut state,
-            crossterm::event::KeyCode::Right,
-            &ScanOptions::default(),
-        );
         assert_eq!(state.report_format(), ReportFormat::Html);
 
         crate::handle_key(
@@ -1630,10 +1635,17 @@ mod tests {
 
         crate::handle_key(
             &mut state,
+            crossterm::event::KeyCode::Right,
+            &ScanOptions::default(),
+        );
+        assert_eq!(state.report_format(), ReportFormat::Json);
+
+        crate::handle_key(
+            &mut state,
             crossterm::event::KeyCode::Left,
             &ScanOptions::default(),
         );
-        assert_eq!(state.report_format(), ReportFormat::Html);
+        assert_eq!(state.report_format(), ReportFormat::Csv);
 
         crate::handle_key(
             &mut state,
@@ -1672,8 +1684,9 @@ mod tests {
         assert!(output.contains("Report"));
         assert!(output.contains("Report sections"));
         assert!(output.contains("Format"));
-        assert!(output.contains("Output target"));
-        assert!(output.contains("JSON"));
+        assert!(output.contains("Target"));
+        assert!(output.contains("Markdown"));
+        assert!(output.contains("code-count-report.md"));
         assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
         assert!(output.contains("Options"));
@@ -1682,7 +1695,11 @@ mod tests {
         assert!(output.contains("Preview"));
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));
-        assert!(output.contains("Total lines"));
+        assert!(output.contains("- Total:"));
+        assert!(output.contains("- Code:"));
+        assert!(output.contains("- Comments:"));
+        assert!(output.contains("- Docs:"));
+        assert!(!output.contains("Total lines"));
         assert!(output.contains("[Space]"));
         assert!(output.contains("[e]"));
     }
@@ -1694,7 +1711,6 @@ mod tests {
         fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write markdown file");
         let report = scan_path(temp_dir.path(), &ScanOptions::default());
         let mut state = AppState::new(report);
-        state.next_report_format();
         state.toggle_report_files();
 
         let markdown = crate::render_report_export(&state).expect("render markdown report");
@@ -1730,12 +1746,12 @@ mod tests {
             &ScanOptions::default(),
         );
 
-        let export_path = temp_dir.path().join("code-count-report.json");
+        let export_path = temp_dir.path().join("code-count-report.md");
         let contents = fs::read_to_string(&export_path).expect("read exported report");
-        assert!(contents.contains("\"summary\""));
+        assert!(contents.contains("# code-count report"));
 
         let output = crate::render_to_text(&state, 96, 28);
         assert!(output.contains("Exported"));
-        assert!(output.contains("code-count-report.json"));
+        assert!(output.contains("code-count-report.md"));
     }
 }

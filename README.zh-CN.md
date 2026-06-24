@@ -100,7 +100,7 @@ ignored_paths = ["target", ".git", "node_modules"]
 
 [tui]
 default_view = "dashboard"
-report_format = "json"
+report_format = "markdown"
 ```
 
 支持的 TUI 视图包括 `dashboard`、`explorer` 和 `report`。支持的报告格式包括 `json`、`markdown`、`html` 和 `csv`。

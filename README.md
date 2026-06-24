@@ -98,7 +98,7 @@ ignored_paths = ["target", ".git", "node_modules"]
 
 [tui]
 default_view = "dashboard"
-report_format = "json"
+report_format = "markdown"
 ```
 
 Supported TUI views are `dashboard`, `explorer`, and `report`. Supported report
