@@ -181,6 +181,7 @@ The first TUI milestone is Dashboard View.
 - [x] Show active ignored paths in the TUI.
 - [x] Add a scan-scope hint area for active ignore rules.
 - [x] Add session-scoped interactive ignore-and-rescan support in Explorer.
+- [x] Add Explorer status feedback and undo for session-scoped ignores.
 - [x] Verify with `cargo fmt --check`, `cargo test`, and `cargo clippy`.
 
 ## Later Ideas

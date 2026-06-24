@@ -101,8 +101,8 @@ current run.
 
 In the TUI Explorer view, the Details panel shows scan-scope suggestions based
 on the largest top-level directories in the current report. Press `i` to add the
-top suggestion to the current session's ignore list and rescan. This does not
-write to `code-count.toml`.
+top suggestion to the current session's ignore list and rescan. Press `u` to
+undo the last session ignore. These actions do not write to `code-count.toml`.
 
 ## Project config
 
