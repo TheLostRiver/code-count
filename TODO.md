@@ -89,5 +89,5 @@ The first TUI milestone is Dashboard View.
 
 - [ ] Scan history and diff between scans.
 - [ ] Markdown and HTML report templates.
-- [ ] Project config file: `code-count.toml`.
+- [x] Project config file: `code-count.toml`.
 - [ ] GUI proof of concept after TUI matures.

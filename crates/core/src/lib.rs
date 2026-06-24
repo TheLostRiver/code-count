@@ -7,6 +7,7 @@ use tokei::{Config, LanguageType, Languages, Report};
 pub struct ScanOptions {
     pub include_blank_lines: bool,
     pub include_comments: bool,
+    pub ignored_paths: Vec<String>,
 }
 
 impl Default for ScanOptions {
@@ -14,6 +15,7 @@ impl Default for ScanOptions {
         Self {
             include_blank_lines: true,
             include_comments: true,
+            ignored_paths: Vec::new(),
         }
     }
 }
@@ -70,7 +72,11 @@ pub struct ScanReport {
 pub fn scan_path(root: impl AsRef<Path>, options: &ScanOptions) -> ScanReport {
     let root = root.as_ref().to_path_buf();
     let paths = [root.clone()];
-    let ignored: [&str; 0] = [];
+    let ignored = options
+        .ignored_paths
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let config = Config::default();
     let mut languages = Languages::new();
 
@@ -237,6 +243,7 @@ mod tests {
 
         assert!(options.include_blank_lines);
         assert!(options.include_comments);
+        assert!(options.ignored_paths.is_empty());
     }
 
     #[test]
@@ -360,5 +367,40 @@ mod tests {
         assert_eq!(markdown.file_stats[0].comment_lines, 0);
         assert_eq!(markdown.file_stats[0].document_lines, 2);
         assert_eq!(markdown.file_stats[0].blank_lines, 1);
+    }
+
+    #[test]
+    fn scan_report_ignores_configured_paths() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::create_dir(temp_dir.path().join("src")).expect("create src dir");
+        fs::create_dir(temp_dir.path().join("ignored")).expect("create ignored dir");
+        fs::write(
+            temp_dir.path().join("src").join("main.rs"),
+            "fn main() {}\n",
+        )
+        .expect("write counted rust file");
+        fs::write(
+            temp_dir.path().join("ignored").join("skip.rs"),
+            "fn skipped() {}\n",
+        )
+        .expect("write ignored rust file");
+        let options = ScanOptions {
+            ignored_paths: vec!["ignored".to_owned()],
+            ..ScanOptions::default()
+        };
+
+        let report = scan_path(temp_dir.path(), &options);
+
+        assert_eq!(report.summary.files, 1);
+        let rust = report
+            .languages
+            .iter()
+            .find(|language| language.name == "Rust")
+            .expect("Rust language stat");
+        assert_eq!(rust.file_stats.len(), 1);
+        assert_eq!(
+            rust.file_stats[0].path,
+            temp_dir.path().join("src").join("main.rs")
+        );
     }
 }

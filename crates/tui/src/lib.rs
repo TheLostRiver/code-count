@@ -56,6 +56,21 @@ impl ReportFormat {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TuiOptions {
+    pub initial_view: AppView,
+    pub report_format: ReportFormat,
+}
+
+impl Default for TuiOptions {
+    fn default() -> Self {
+        Self {
+            initial_view: AppView::Dashboard,
+            report_format: ReportFormat::Json,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     report: ScanReport,
@@ -71,13 +86,17 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(report: ScanReport) -> Self {
+        Self::new_with_options(report, TuiOptions::default())
+    }
+
+    pub fn new_with_options(report: ScanReport, options: TuiOptions) -> Self {
         Self {
             report,
-            current_view: AppView::Dashboard,
+            current_view: options.initial_view,
             selected_language_index: 0,
             language_filter: String::new(),
             editing_language_filter: false,
-            report_format: ReportFormat::Json,
+            report_format: options.report_format,
             include_report_languages: true,
             include_report_files: false,
             report_status: None,
@@ -233,13 +252,25 @@ impl AppState {
 }
 
 pub fn run(report: ScanReport, options: ScanOptions) -> Result<()> {
+    run_with_options(report, options, TuiOptions::default())
+}
+
+pub fn run_with_options(
+    report: ScanReport,
+    options: ScanOptions,
+    tui_options: TuiOptions,
+) -> Result<()> {
     if !io::stdout().is_terminal() {
         print_non_interactive_preview(&report);
         return Ok(());
     }
 
     let mut terminal = ratatui::init();
-    let result = run_app(&mut terminal, AppState::new(report), options);
+    let result = run_app(
+        &mut terminal,
+        AppState::new_with_options(report, tui_options),
+        options,
+    );
     ratatui::restore();
 
     result
@@ -1279,6 +1310,21 @@ mod tests {
         assert_eq!(state.report_format(), ReportFormat::Json);
         assert!(state.includes_language_details());
         assert!(!state.includes_file_details());
+    }
+
+    #[test]
+    fn app_state_can_start_from_tui_options() {
+        let report = scan_path(".", &ScanOptions::default());
+        let state = AppState::new_with_options(
+            report,
+            crate::TuiOptions {
+                initial_view: AppView::Report,
+                report_format: ReportFormat::Csv,
+            },
+        );
+
+        assert_eq!(state.current_view(), AppView::Report);
+        assert_eq!(state.report_format(), ReportFormat::Csv);
     }
 
     #[test]
