@@ -84,6 +84,14 @@ The first TUI milestone is Dashboard View.
 - [x] Polish Explorer language/details panels with percentages and largest files.
 - [x] Polish Report controls with report section language.
 
+## Milestone 6.6: TUI Visual Polish v0.3
+
+- [x] Add view-specific header titles for Dashboard, Explorer, and Report.
+- [x] Make Dashboard emphasize the Total line composition before secondary panels.
+- [x] Improve Explorer selected language and detail visual hierarchy.
+- [x] Polish Report Builder controls and preview copy.
+- [x] Render key bindings as compact key-hint chips.
+
 ## Milestone 7: Quality Gates
 
 - [x] Run `cargo fmt --check`.

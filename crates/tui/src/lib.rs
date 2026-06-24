@@ -29,6 +29,9 @@ const COLOR_CODE: Color = Color::Rgb(158, 206, 106);
 const COLOR_COMMENTS: Color = Color::Rgb(122, 162, 247);
 const COLOR_DOCS: Color = Color::Rgb(224, 175, 104);
 const COLOR_BRAND: Color = Color::Rgb(125, 207, 255);
+const COLOR_SELECTION: Color = Color::Rgb(31, 39, 58);
+const COLOR_KEY_BG: Color = Color::Rgb(37, 44, 68);
+const COLOR_KEY_TEXT: Color = Color::Rgb(198, 208, 245);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
@@ -341,16 +344,16 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         .split(area);
 
     let title = Paragraph::new(Line::from(vec![
-        Span::styled("code-count", Style::default().fg(COLOR_BRAND)),
+        Span::styled(command_label(state), Style::default().fg(COLOR_BRAND)),
         Span::raw("  "),
         Span::styled(
             state.report.summary.root.display().to_string(),
             Style::default().fg(COLOR_MUTED),
         ),
         Span::raw("  "),
-        Span::styled("scan complete", Style::default().fg(COLOR_MUTED)),
+        Span::styled(status_label(state), Style::default().fg(COLOR_MUTED)),
     ]))
-    .block(panel_block("Project"));
+    .block(panel_block(view_title(state.current_view())));
     title.render(chunks[0], buffer);
 
     match state.current_view {
@@ -359,7 +362,7 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
         AppView::Report => render_report(chunks[1], buffer, state),
     }
 
-    let footer = Paragraph::new(footer_text(state)).block(panel_block("Keys"));
+    let footer = Paragraph::new(footer_line(state)).block(panel_block("Keys"));
     footer.render(chunks[2], buffer);
 }
 
@@ -402,16 +405,16 @@ fn render_dashboard(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_dashboard_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(8)])
+        .constraints([
+            Constraint::Length(7),
+            Constraint::Length(8),
+            Constraint::Min(8),
+        ])
         .split(area);
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(rows[1]);
 
     render_stats_panel(rows[0], buffer, state);
-    render_composition_panel(columns[0], buffer, state);
-    render_languages_panel(columns[1], buffer, state);
+    render_composition_panel(rows[1], buffer, state);
+    render_languages_panel(rows[2], buffer, state);
 }
 
 fn render_dashboard_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
@@ -432,7 +435,7 @@ fn render_dashboard_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
 fn render_stats_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let lines = stats_lines(state);
     Paragraph::new(lines)
-        .block(panel_block("Dashboard"))
+        .block(panel_block("Project Dashboard"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -504,28 +507,38 @@ fn render_report(area: Rect, buffer: &mut Buffer, state: &AppState) {
 }
 
 fn render_report_wide(area: Rect, buffer: &mut Buffer, state: &AppState) {
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(9),
+            Constraint::Min(8),
+            Constraint::Length(5),
+        ])
         .split(area);
 
-    render_report_controls(columns[0], buffer, state);
-    render_report_preview(columns[1], buffer, state);
+    render_report_controls(rows[0], buffer, state);
+    render_report_preview(rows[1], buffer, state);
+    render_report_export_panel(rows[2], buffer, state);
 }
 
 fn render_report_stacked(area: Rect, buffer: &mut Buffer, state: &AppState) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(15), Constraint::Min(8)])
+        .constraints([
+            Constraint::Length(9),
+            Constraint::Min(8),
+            Constraint::Length(5),
+        ])
         .split(area);
 
     render_report_controls(rows[0], buffer, state);
     render_report_preview(rows[1], buffer, state);
+    render_report_export_panel(rows[2], buffer, state);
 }
 
 fn render_report_controls(area: Rect, buffer: &mut Buffer, state: &AppState) {
     Paragraph::new(report_control_lines(state))
-        .block(panel_block("Report"))
+        .block(panel_block("Report Builder"))
         .wrap(Wrap { trim: true })
         .render(area, buffer);
 }
@@ -537,28 +550,35 @@ fn render_report_preview(area: Rect, buffer: &mut Buffer, state: &AppState) {
         .render(area, buffer);
 }
 
+fn render_report_export_panel(area: Rect, buffer: &mut Buffer, state: &AppState) {
+    Paragraph::new(report_export_lines(state))
+        .block(panel_block("Export"))
+        .wrap(Wrap { trim: true })
+        .render(area, buffer);
+}
+
 fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
     let summary = &state.report.summary;
     let categories = &state.report.categories;
     vec![
         Line::from(vec![
-            Span::styled("Files", Style::default().fg(COLOR_MUTED)),
-            Span::raw(" "),
-            Span::styled(summary.files.to_string(), Style::default().fg(COLOR_TITLE)),
-            Span::raw("   "),
             Span::styled("Total", Style::default().fg(COLOR_MUTED)),
             Span::raw(" "),
             Span::styled(
                 summary.total_lines.to_string(),
                 Style::default().fg(COLOR_CODE),
             ),
+            Span::raw("   "),
+            Span::styled("Files", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(summary.files.to_string(), Style::default().fg(COLOR_TITLE)),
         ]),
         segment_bar(
             categories.code,
             categories.comments,
             categories.documents,
             categories.blanks,
-            56,
+            64,
         ),
         Line::from(vec![
             Span::styled("code", Style::default().fg(COLOR_CODE)),
@@ -713,13 +733,19 @@ fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
             COLOR_CODE
         };
 
+        let row_style = if index == state.selected_language_index {
+            Style::default().bg(COLOR_SELECTION)
+        } else {
+            Style::default()
+        };
+
         lines.push(Line::from(vec![
-            Span::styled(selection, Style::default().fg(COLOR_TITLE)),
+            Span::styled(selection, row_style.fg(COLOR_TITLE)),
             Span::raw(" "),
-            Span::styled(format!("{:<16}", language.name), Style::default().fg(color)),
-            Span::raw(format!("{:>4}%", percent)),
+            Span::styled(format!("{:<16}", language.name), row_style.fg(color)),
+            Span::styled(format!("{:>4}%", percent), row_style),
             Span::raw(" "),
-            Span::styled(format!("{:>4}", category), Style::default().fg(COLOR_MUTED)),
+            Span::styled(format!("{:>4}", category), row_style.fg(COLOR_MUTED)),
         ]));
     }
 
@@ -816,28 +842,6 @@ fn report_control_lines(state: &AppState) -> Vec<Line<'static>> {
             checkbox(state.include_report_files)
         )),
         Line::from("[ ] Save history snapshot"),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "Export",
-            Style::default().fg(COLOR_MUTED),
-        )]),
-        Line::from(format!(
-            "Format {}",
-            report_format_label(state.report_format)
-        )),
-        Line::from(format!(
-            "Language details {}",
-            toggle_label(state.include_report_languages)
-        )),
-        Line::from(format!(
-            "File details {}",
-            toggle_label(state.include_report_files)
-        )),
-        Line::from(""),
-        Line::from("Left/Right format"),
-        Line::from("l languages"),
-        Line::from("f files"),
-        Line::from("e export"),
     ]
 }
 
@@ -848,18 +852,20 @@ fn checkbox(enabled: bool) -> &'static str {
 fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
     let summary = &state.report.summary;
     let mut lines = vec![
-        Line::from(format!("Root {}", summary.root.display())),
-        Line::from(format!("Files {}", summary.files)),
-        Line::from(format!("Total lines {}", summary.total_lines)),
-        Line::from(format!("Code lines {}", summary.code_lines)),
-        Line::from(format!("Comment lines {}", summary.comment_lines)),
-        Line::from(format!("Document lines {}", summary.document_lines)),
-        Line::from(format!("Blank lines {}", summary.blank_lines)),
+        Line::from(vec![Span::styled(
+            "# Project Line Report",
+            Style::default().fg(COLOR_TITLE),
+        )]),
+        Line::from(format!("- Root: {}", summary.root.display())),
+        Line::from(format!("Target {}", report_output_path(state).display())),
         Line::from(""),
-        Line::from(format!(
-            "Export target {}",
-            report_output_path(state).display()
-        )),
+        Line::from(format!("- Files: {}", summary.files)),
+        Line::from(format!("- Total lines: {}", summary.total_lines)),
+        Line::from(format!("- Code lines: {}", summary.code_lines)),
+        Line::from(format!("- Comment lines: {}", summary.comment_lines)),
+        Line::from(format!("- Document lines: {}", summary.document_lines)),
+        Line::from(format!("- Blank lines: {}", summary.blank_lines)),
+        Line::from(""),
     ];
 
     if state.include_report_languages {
@@ -885,6 +891,37 @@ fn report_preview_lines(state: &AppState) -> Vec<Line<'static>> {
 
     if let Some(status) = &state.report_status {
         lines.push(Line::from(""));
+        lines.push(Line::from(status.clone()));
+    }
+
+    lines
+}
+
+fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("Format", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(
+                report_format_label(state.report_format),
+                Style::default().fg(COLOR_CODE),
+            ),
+            Span::raw("   "),
+            Span::styled("Target", Style::default().fg(COLOR_MUTED)),
+            Span::raw(" "),
+            Span::styled(
+                report_output_path(state).display().to_string(),
+                Style::default().fg(COLOR_TITLE),
+            ),
+        ]),
+        Line::from(format!(
+            "Language details {}   File details {}",
+            toggle_label(state.include_report_languages),
+            toggle_label(state.include_report_files)
+        )),
+    ];
+
+    if let Some(status) = &state.report_status {
         lines.push(Line::from(status.clone()));
     }
 
@@ -975,21 +1012,84 @@ fn percentage(value: usize, total: usize) -> usize {
     value * 100 / total
 }
 
-fn footer_text(state: &AppState) -> &'static str {
+fn view_title(view: AppView) -> &'static str {
+    match view {
+        AppView::Dashboard => "A. Project Dashboard",
+        AppView::Explorer => "B. Explorer + Details",
+        AppView::Report => "C. Report Builder",
+    }
+}
+
+fn command_label(state: &AppState) -> &'static str {
+    match state.current_view() {
+        AppView::Dashboard => "code-count",
+        AppView::Explorer => "code-count tui",
+        AppView::Report => "code-count report",
+    }
+}
+
+fn status_label(state: &AppState) -> &'static str {
+    match state.current_view() {
+        AppView::Report => "interactive",
+        _ => "scan complete",
+    }
+}
+
+fn key_chip(label: &'static str) -> Span<'static> {
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(COLOR_KEY_TEXT).bg(COLOR_KEY_BG),
+    )
+}
+
+fn footer_line(state: &AppState) -> Line<'static> {
     if state.is_editing_language_filter() {
-        return "type filter | Backspace delete | Enter apply | Esc done";
+        return Line::from(vec![
+            Span::raw("type filter | "),
+            key_chip("Backspace"),
+            Span::raw(" delete | "),
+            key_chip("Enter"),
+            Span::raw(" apply | "),
+            key_chip("Esc"),
+            Span::raw(" done"),
+        ]);
     }
 
     match state.current_view() {
-        AppView::Explorer => {
-            "q quit | r rescan | Up/Down select | / filter | Tab next view | 1 dashboard | 2 explorer | 3 report"
-        }
-        AppView::Report => {
-            "q quit | r rescan | Left/Right format | l languages | f files | e export | Tab next view"
-        }
-        AppView::Dashboard => {
-            "q quit | r rescan | Tab next view | 1 dashboard | 2 explorer | 3 report"
-        }
+        AppView::Explorer => Line::from(vec![
+            key_chip("q"),
+            Span::raw(" quit | "),
+            key_chip("r"),
+            Span::raw(" rescan | "),
+            key_chip("Up/Down"),
+            Span::raw(" select | "),
+            key_chip("/"),
+            Span::raw(" filter | "),
+            key_chip("Tab"),
+            Span::raw(" next view"),
+        ]),
+        AppView::Report => Line::from(vec![
+            key_chip("q"),
+            Span::raw(" quit | "),
+            key_chip("r"),
+            Span::raw(" rescan | "),
+            key_chip("Left/Right"),
+            Span::raw(" format | "),
+            key_chip("l"),
+            Span::raw(" languages | "),
+            key_chip("f"),
+            Span::raw(" files | "),
+            key_chip("e"),
+            Span::raw(" export"),
+        ]),
+        AppView::Dashboard => Line::from(vec![
+            key_chip("Tab"),
+            Span::raw(" panes | "),
+            key_chip("r"),
+            Span::raw(" rescan | "),
+            key_chip("q"),
+            Span::raw(" quit"),
+        ]),
     }
 }
 
@@ -1063,10 +1163,11 @@ mod tests {
 
         let output = crate::render_to_text(&state, 96, 28);
 
+        assert!(output.contains("A. Project Dashboard"));
         assert!(output.contains("code-count"));
         assert!(output.contains("scan complete"));
-        assert!(output.contains("Files"));
         assert!(output.contains("Total"));
+        assert!(output.contains("Files"));
         assert!(output.contains("code"));
         assert!(output.contains("comments"));
         assert!(output.contains("docs"));
@@ -1076,8 +1177,9 @@ mod tests {
         assert!(output.contains("Blank"));
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
-        assert!(output.contains("q quit"));
-        assert!(output.contains("Tab next view"));
+        assert!(output.contains("[Tab]"));
+        assert!(output.contains("[r]"));
+        assert!(output.contains("[q]"));
     }
 
     #[test]
@@ -1091,7 +1193,7 @@ mod tests {
         assert!(output.contains("Files"));
         assert!(output.contains("Composition"));
         assert!(output.contains("Top Languages"));
-        assert!(output.contains("q quit"));
+        assert!(output.contains("[q]"));
     }
 
     #[test]
@@ -1113,6 +1215,7 @@ mod tests {
 
         let output = crate::render_to_text(&state, 96, 28);
 
+        assert!(output.contains("B. Explorer + Details"));
         assert!(output.contains("Languages"));
         assert!(output.contains("Details"));
         assert!(output.contains("Largest files"));
@@ -1400,6 +1503,7 @@ mod tests {
 
         let output = crate::render_to_text(&state, 96, 28);
 
+        assert!(output.contains("C. Report Builder"));
         assert!(output.contains("Report"));
         assert!(output.contains("Report sections"));
         assert!(output.contains("Format"));
@@ -1407,8 +1511,10 @@ mod tests {
         assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
         assert!(output.contains("Preview"));
+        assert!(output.contains("# Project Line Report"));
+        assert!(output.contains("Target"));
         assert!(output.contains("Total lines"));
-        assert!(output.contains("e export"));
+        assert!(output.contains("[e]"));
     }
 
     #[test]
