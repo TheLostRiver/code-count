@@ -1,7 +1,8 @@
 use std::{
+    collections::BTreeMap,
     fs,
     io::{self, IsTerminal},
-    path::Path,
+    path::{Component, Path},
 };
 
 use anyhow::Result;
@@ -35,6 +36,13 @@ const COLOR_KEY_TEXT: Color = Color::Rgb(198, 208, 245);
 const BAR_FILL: char = '█';
 const BAR_EMPTY: char = '░';
 const SUMMARY_WIDTH: usize = 76;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ScopeSuggestion {
+    path: String,
+    total_lines: usize,
+    files: usize,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
@@ -130,8 +138,21 @@ impl AppState {
 
     pub fn rescan(&mut self, options: &ScanOptions) {
         let root = self.report.summary.root.clone();
-        self.report = scan_path(root, options);
+        let effective_options = self.effective_scan_options(options);
+        self.report = scan_path(root, &effective_options);
         self.clamp_selected_language();
+    }
+
+    fn ignore_top_scope_suggestion(&mut self, options: &ScanOptions) {
+        let Some(suggestion) = scope_suggestions(&self.report, &self.ignored_paths)
+            .into_iter()
+            .next()
+        else {
+            return;
+        };
+
+        push_unique(&mut self.ignored_paths, suggestion.path);
+        self.rescan(options);
     }
 
     pub fn selected_language(&self) -> Option<&LanguageStat> {
@@ -254,6 +275,12 @@ impl AppState {
                 .min(language_count.saturating_sub(1));
         }
     }
+
+    fn effective_scan_options(&self, options: &ScanOptions) -> ScanOptions {
+        let mut effective_options = options.clone();
+        effective_options.ignored_paths = self.ignored_paths.clone();
+        effective_options
+    }
 }
 
 pub fn run(report: ScanReport, options: ScanOptions) -> Result<()> {
@@ -330,6 +357,9 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
         KeyCode::Down if state.current_view() == AppView::Explorer => state.select_next_language(),
         KeyCode::Char('/') if state.current_view() == AppView::Explorer => {
             state.start_language_filter();
+        }
+        KeyCode::Char('i') if state.current_view() == AppView::Explorer => {
+            state.ignore_top_scope_suggestion(options);
         }
         KeyCode::Left if state.current_view() == AppView::Report => state.previous_report_format(),
         KeyCode::Right if state.current_view() == AppView::Report => state.next_report_format(),
@@ -934,6 +964,42 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
     ];
 
     lines.extend(file_detail_lines(language, &state.report.summary.root));
+    lines.push(Line::from(""));
+    lines.extend(scope_suggestion_lines(state));
+    lines
+}
+
+fn scope_suggestion_lines(state: &AppState) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(vec![Span::styled(
+        "Scope suggestions",
+        Style::default().fg(COLOR_MUTED),
+    )])];
+
+    let suggestions = scope_suggestions(&state.report, &state.ignored_paths);
+    if suggestions.is_empty() {
+        lines.push(Line::from("No directory candidates"));
+        return lines;
+    }
+
+    for (index, suggestion) in suggestions.iter().take(3).enumerate() {
+        let marker = if index == 0 { "> " } else { "  " };
+        lines.push(Line::from(vec![
+            Span::styled(marker, Style::default().fg(COLOR_TITLE)),
+            Span::styled(
+                format!("{:<16}", suggestion.path),
+                Style::default().fg(COLOR_TITLE),
+            ),
+            Span::styled(
+                format!("{:>8} lines", format_count(suggestion.total_lines)),
+                Style::default().fg(COLOR_CODE),
+            ),
+            Span::styled(
+                format!("  {:>3} files", format_count(suggestion.files)),
+                Style::default().fg(COLOR_MUTED),
+            ),
+        ]));
+    }
+
     lines
 }
 
@@ -1103,6 +1169,60 @@ fn display_path(path: &Path, root: &Path) -> String {
         .replace('\\', "/")
 }
 
+fn scope_suggestions(report: &ScanReport, ignored_paths: &[String]) -> Vec<ScopeSuggestion> {
+    let mut totals = BTreeMap::<String, ScopeSuggestion>::new();
+
+    for language in &report.languages {
+        for file_stat in &language.file_stats {
+            let Some(path) = scope_candidate_path(&file_stat.path, &report.summary.root) else {
+                continue;
+            };
+            if ignored_paths
+                .iter()
+                .any(|ignored_path| ignored_path == &path)
+            {
+                continue;
+            }
+
+            let suggestion = totals.entry(path.clone()).or_insert(ScopeSuggestion {
+                path,
+                total_lines: 0,
+                files: 0,
+            });
+            suggestion.total_lines += file_stat.total_lines;
+            suggestion.files += 1;
+        }
+    }
+
+    let mut suggestions = totals.into_values().collect::<Vec<_>>();
+    suggestions.sort_by(|left, right| {
+        right
+            .total_lines
+            .cmp(&left.total_lines)
+            .then_with(|| right.files.cmp(&left.files))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    suggestions
+}
+
+fn scope_candidate_path(path: &Path, root: &Path) -> Option<String> {
+    let relative_path = path.strip_prefix(root).ok()?;
+    let mut components = relative_path.components();
+    let first = components.next()?;
+    components.next()?;
+
+    match first {
+        Component::Normal(path) => Some(path.to_string_lossy().replace('\\', "/")),
+        _ => None,
+    }
+}
+
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !values.iter().any(|existing| existing == &value) {
+        values.push(value);
+    }
+}
+
 fn metric_line(label: &'static str, value: impl Into<String>) -> Line<'static> {
     label_value_line(label, value, COLOR_TITLE)
 }
@@ -1211,6 +1331,8 @@ fn footer_line(state: &AppState) -> Line<'static> {
             Span::raw(" detail | "),
             key_chip("/"),
             Span::raw(" filter | "),
+            key_chip("i"),
+            Span::raw(" ignore | "),
             key_chip("Tab"),
             Span::raw(" view | "),
             key_chip("q"),
@@ -1408,6 +1530,66 @@ mod tests {
         let output = crate::render_to_text(&state, 96, 28);
 
         assert!(output.contains("ignored: vendor, build"));
+    }
+
+    #[test]
+    fn scope_suggestions_rank_root_directories_by_total_lines() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let vendor_dir = temp_dir.path().join("vendor");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&vendor_dir).expect("create vendor dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        fs::write(
+            vendor_dir.join("generated.rs"),
+            "pub fn generated() {}\n".repeat(24),
+        )
+        .expect("write generated rust file");
+        fs::write(src_dir.join("main.rs"), "fn main() {}\n".repeat(4))
+            .expect("write main rust file");
+        fs::write(temp_dir.path().join("README.md"), "# Notes\n").expect("write readme");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+
+        let suggestions = crate::scope_suggestions(&report, &[]);
+
+        assert_eq!(suggestions[0].path, "vendor");
+        assert_eq!(suggestions[0].total_lines, 24);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.path == "src")
+        );
+    }
+
+    #[test]
+    fn explorer_ignore_key_adds_top_scope_suggestion_and_rescans() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let vendor_dir = temp_dir.path().join("vendor");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&vendor_dir).expect("create vendor dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        fs::write(
+            vendor_dir.join("generated.rs"),
+            "pub fn generated() {}\n".repeat(20),
+        )
+        .expect("write generated rust file");
+        fs::write(src_dir.join("main.rs"), "fn main() {}\n").expect("write main rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('i'),
+            &ScanOptions::default(),
+        );
+
+        assert!(state.ignored_paths.iter().any(|path| path == "vendor"));
+        assert_eq!(state.report().summary.files, 1);
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(output.contains("ignored: vendor"));
+        assert!(output.contains("Scope suggestions"));
+        assert!(!output.contains("generated.rs"));
     }
 
     #[test]
