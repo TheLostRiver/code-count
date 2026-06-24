@@ -586,7 +586,7 @@ fn stats_lines(state: &AppState) -> Vec<Line<'static>> {
             categories.comments,
             categories.documents,
             categories.blanks,
-            64,
+            76,
         ),
         Line::from(vec![
             Span::styled("code", Style::default().fg(COLOR_CODE)),
@@ -797,9 +797,10 @@ fn explorer_language_lines(state: &AppState) -> Vec<Line<'static>> {
             Style::default().fg(COLOR_MUTED),
         )]));
 
-        for file_stat in language.file_stats.iter().take(5) {
+        for (index, file_stat) in language.file_stats.iter().take(5).enumerate() {
+            let marker = if index == 0 { "> " } else { "  " };
             lines.push(Line::from(vec![
-                Span::styled("> ", Style::default().fg(COLOR_TITLE)),
+                Span::styled(marker, Style::default().fg(COLOR_TITLE)),
                 Span::styled(
                     display_path(&file_stat.path, &state.report.summary.root),
                     Style::default().fg(COLOR_MUTED),
@@ -964,14 +965,6 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
         ),
         label_value_line("Target", report_output_file_name(state), COLOR_TITLE),
         label_value_line(
-            "Options",
-            format!(
-                "Language details {}",
-                toggle_label(state.include_report_languages)
-            ),
-            COLOR_TITLE,
-        ),
-        label_value_line(
             "File details",
             toggle_label(state.include_report_files),
             COLOR_TITLE,
@@ -980,12 +973,6 @@ fn report_export_lines(state: &AppState) -> Vec<Line<'static>> {
 
     if let Some(status) = &state.report_status {
         lines.push(Line::from(status.clone()));
-    } else {
-        lines.push(label_value_line(
-            "Ready",
-            format!("Export ready {}", report_extension(state.report_format)),
-            COLOR_TITLE,
-        ));
     }
 
     lines
@@ -1303,6 +1290,15 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_summary_uses_long_total_bar() {
+        let report = scan_path(".", &ScanOptions::default());
+        let state = AppState::new(report);
+        let lines: Vec<String> = crate::stats_lines(&state).iter().map(line_text).collect();
+
+        assert!(lines[1].chars().count() >= 72);
+    }
+
+    #[test]
     fn dashboard_renders_key_information_on_narrow_terminal() {
         let report = scan_path(".", &ScanOptions::default());
         let state = AppState::new(report);
@@ -1393,6 +1389,16 @@ mod tests {
         assert!(lines.iter().any(|line| line.trim() == "Files"));
         assert!(lines.iter().any(|line| line.contains("main.rs")));
         assert!(lines.iter().any(|line| line.contains("lib.rs")));
+
+        let files_start = lines
+            .iter()
+            .position(|line| line.trim() == "Files")
+            .expect("files section");
+        let marked_files = lines[files_start + 1..]
+            .iter()
+            .filter(|line| line.trim_start().starts_with("> "))
+            .count();
+        assert_eq!(marked_files, 1);
     }
 
     #[test]
@@ -1687,11 +1693,10 @@ mod tests {
         assert!(output.contains("Target"));
         assert!(output.contains("Markdown"));
         assert!(output.contains("code-count-report.md"));
-        assert!(output.contains("Language details"));
         assert!(output.contains("File details"));
-        assert!(output.contains("Options"));
-        assert!(output.contains("Export ready"));
-        assert!(output.contains("Ready"));
+        assert!(!output.contains("Options"));
+        assert!(!output.contains("Export ready"));
+        assert!(!output.contains("Ready"));
         assert!(output.contains("Preview"));
         assert!(output.contains("# Project Line Report"));
         assert!(output.contains("Target"));
