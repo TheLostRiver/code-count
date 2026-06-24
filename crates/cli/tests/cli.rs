@@ -94,6 +94,64 @@ fn cli_ignore_option_excludes_paths_for_one_off_scans() {
 }
 
 #[test]
+fn init_command_writes_default_project_config() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command.arg("init").arg(temp_dir.path());
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created config"));
+
+    let config =
+        fs::read_to_string(temp_dir.path().join("code-count.toml")).expect("read generated config");
+    assert!(config.contains("[scan]"));
+    assert!(config.contains("ignored_paths"));
+    assert!(config.contains("node_modules"));
+    assert!(config.contains("[tui]"));
+    assert!(config.contains("default_view = \"dashboard\""));
+}
+
+#[test]
+fn init_command_refuses_to_overwrite_existing_config_without_force() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let config_path = temp_dir.path().join("code-count.toml");
+    fs::write(&config_path, "# keep me\n").expect("write existing config");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command.arg("init").arg(temp_dir.path());
+
+    command
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists"));
+
+    let config = fs::read_to_string(config_path).expect("read config");
+    assert_eq!(config, "# keep me\n");
+}
+
+#[test]
+fn init_command_force_overwrites_existing_config() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let config_path = temp_dir.path().join("code-count.toml");
+    fs::write(&config_path, "# replace me\n").expect("write existing config");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command.arg("init").arg(temp_dir.path()).arg("--force");
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created config"));
+
+    let config = fs::read_to_string(config_path).expect("read config");
+    assert!(config.contains("[scan]"));
+    assert!(!config.contains("replace me"));
+}
+
+#[test]
 fn history_save_writes_snapshot_json() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let snapshot_path = temp_dir.path().join("snapshot.json");

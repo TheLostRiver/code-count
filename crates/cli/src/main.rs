@@ -61,6 +61,13 @@ enum Command {
         #[command(subcommand)]
         command: HistoryCommand,
     },
+    Init {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        #[arg(long)]
+        force: bool,
+    },
     Diff {
         before: PathBuf,
         after: PathBuf,
@@ -145,6 +152,11 @@ fn main() -> Result<()> {
             let after_report = read_snapshot(after)?;
             let diff = diff_reports(&before_report, &after_report);
             print_diff(&diff);
+            return Ok(());
+        }
+        Some(Command::Init { path, force }) => {
+            ensure_path_exists(path)?;
+            write_default_config(path, *force)?;
             return Ok(());
         }
         None => {}
@@ -321,6 +333,32 @@ fn write_report_output(contents: &str, output: Option<&Path>) -> Result<()> {
     fs::write(output, contents)?;
     println!("Saved report: {}", output.display());
     Ok(())
+}
+
+fn write_default_config(path: &Path, force: bool) -> Result<()> {
+    let config_path = project_config_path(path);
+    if config_path.exists() && !force {
+        bail!(
+            "config already exists: {} (use --force to overwrite)",
+            config_path.display()
+        );
+    }
+
+    fs::write(&config_path, default_config_contents())?;
+    println!("Created config: {}", config_path.display());
+    Ok(())
+}
+
+fn default_config_contents() -> &'static str {
+    r#"[scan]
+include_blank_lines = true
+include_comments = true
+ignored_paths = ["target", ".git", "node_modules", "dist", "build", "vendor"]
+
+[tui]
+default_view = "dashboard"
+report_format = "markdown"
+"#
 }
 
 fn read_snapshot(path: &Path) -> Result<ScanReport> {
