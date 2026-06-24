@@ -77,7 +77,9 @@ pub struct AppState {
     include_report_languages: bool,
     include_report_files: bool,
     report_status: Option<String>,
+    scope_status: Option<String>,
     ignored_paths: Vec<String>,
+    session_ignored_paths: Vec<String>,
 }
 
 impl AppState {
@@ -112,7 +114,9 @@ impl AppState {
             include_report_languages: true,
             include_report_files: false,
             report_status: None,
+            scope_status: None,
             ignored_paths,
+            session_ignored_paths: Vec::new(),
         }
     }
 
@@ -151,7 +155,21 @@ impl AppState {
             return;
         };
 
-        push_unique(&mut self.ignored_paths, suggestion.path);
+        push_unique(&mut self.ignored_paths, suggestion.path.clone());
+        push_unique(&mut self.session_ignored_paths, suggestion.path.clone());
+        self.scope_status = Some(format!("Ignored {} for this session", suggestion.path));
+        self.rescan(options);
+    }
+
+    fn undo_last_session_ignore(&mut self, options: &ScanOptions) {
+        let Some(path) = self.session_ignored_paths.pop() else {
+            self.scope_status = Some("No session ignores to undo".to_owned());
+            return;
+        };
+
+        self.ignored_paths
+            .retain(|ignored_path| ignored_path != &path);
+        self.scope_status = Some(format!("Restored {path}"));
         self.rescan(options);
     }
 
@@ -360,6 +378,9 @@ fn handle_key(state: &mut AppState, key_code: KeyCode, options: &ScanOptions) ->
         }
         KeyCode::Char('i') if state.current_view() == AppView::Explorer => {
             state.ignore_top_scope_suggestion(options);
+        }
+        KeyCode::Char('u') if state.current_view() == AppView::Explorer => {
+            state.undo_last_session_ignore(options);
         }
         KeyCode::Left if state.current_view() == AppView::Report => state.previous_report_format(),
         KeyCode::Right if state.current_view() == AppView::Report => state.next_report_format(),
@@ -966,6 +987,10 @@ fn explorer_detail_lines(state: &AppState) -> Vec<Line<'static>> {
     lines.extend(file_detail_lines(language, &state.report.summary.root));
     lines.push(Line::from(""));
     lines.extend(scope_suggestion_lines(state));
+    if let Some(status) = &state.scope_status {
+        lines.push(Line::from(""));
+        lines.push(Line::from(status.clone()));
+    }
     lines
 }
 
@@ -1333,6 +1358,8 @@ fn footer_line(state: &AppState) -> Line<'static> {
             Span::raw(" filter | "),
             key_chip("i"),
             Span::raw(" ignore | "),
+            key_chip("u"),
+            Span::raw(" undo | "),
             key_chip("Tab"),
             Span::raw(" view | "),
             key_chip("q"),
@@ -1588,8 +1615,45 @@ mod tests {
 
         let output = crate::render_to_text(&state, 96, 28);
         assert!(output.contains("ignored: vendor"));
+        assert!(output.contains("Ignored vendor for this session"));
         assert!(output.contains("Scope suggestions"));
         assert!(!output.contains("generated.rs"));
+    }
+
+    #[test]
+    fn explorer_undo_key_removes_last_session_ignore_and_rescans() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let vendor_dir = temp_dir.path().join("vendor");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&vendor_dir).expect("create vendor dir");
+        fs::create_dir_all(&src_dir).expect("create src dir");
+        fs::write(
+            vendor_dir.join("generated.rs"),
+            "pub fn generated() {}\n".repeat(20),
+        )
+        .expect("write generated rust file");
+        fs::write(src_dir.join("main.rs"), "fn main() {}\n").expect("write main rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let mut state = AppState::new(report);
+        state.set_view(AppView::Explorer);
+
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('i'),
+            &ScanOptions::default(),
+        );
+        crate::handle_key(
+            &mut state,
+            crossterm::event::KeyCode::Char('u'),
+            &ScanOptions::default(),
+        );
+
+        assert!(!state.ignored_paths.iter().any(|path| path == "vendor"));
+        assert_eq!(state.report().summary.files, 2);
+
+        let output = crate::render_to_text(&state, 96, 28);
+        assert!(!output.contains("ignored: vendor"));
+        assert!(output.contains("Restored vendor"));
     }
 
     #[test]
