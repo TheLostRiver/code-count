@@ -418,8 +418,12 @@ fn draw(area: Rect, buffer: &mut ratatui::buffer::Buffer, state: &AppState) {
     let mut title_spans = vec![
         Span::styled(command_label(state), Style::default().fg(COLOR_BRAND)),
         Span::raw("  "),
-        Span::styled(status_label(state), Style::default().fg(COLOR_MUTED)),
     ];
+    title_spans.extend(view_tab_spans(state.current_view()));
+    title_spans.extend([
+        Span::raw("  "),
+        Span::styled(status_label(state), Style::default().fg(COLOR_MUTED)),
+    ]);
     if let Some(scope) = scope_label(state) {
         title_spans.push(Span::raw("  "));
         title_spans.push(Span::styled(scope, Style::default().fg(COLOR_DOCS)));
@@ -1304,6 +1308,30 @@ fn status_label(state: &AppState) -> &'static str {
     }
 }
 
+fn view_tab_spans(current_view: AppView) -> Vec<Span<'static>> {
+    [
+        (AppView::Dashboard, "1 Dashboard"),
+        (AppView::Explorer, "2 Explorer"),
+        (AppView::Report, "3 Report"),
+    ]
+    .into_iter()
+    .enumerate()
+    .flat_map(|(index, (view, label))| {
+        let style = if view == current_view {
+            Style::default().fg(COLOR_KEY_TEXT).bg(COLOR_KEY_BG)
+        } else {
+            Style::default().fg(COLOR_MUTED)
+        };
+        let mut spans = Vec::new();
+        if index > 0 {
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::styled(format!(" {label} "), style));
+        spans
+    })
+    .collect()
+}
+
 fn scope_label(state: &AppState) -> Option<String> {
     let visible_paths = state
         .ignored_paths
@@ -1557,6 +1585,27 @@ mod tests {
         let output = crate::render_to_text(&state, 96, 28);
 
         assert!(output.contains("ignored: vendor, build"));
+    }
+
+    #[test]
+    fn tui_header_renders_view_tabs_with_scope_context() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+        let report = scan_path(temp_dir.path(), &ScanOptions::default());
+        let scan_options = ScanOptions {
+            ignored_paths: vec!["vendor".to_owned()],
+            ..ScanOptions::default()
+        };
+        let mut state =
+            AppState::new_with_scan_options(report, TuiOptions::default(), &scan_options);
+        state.set_view(AppView::Explorer);
+
+        let output = crate::render_to_text(&state, 112, 28);
+
+        assert!(output.contains("1 Dashboard"));
+        assert!(output.contains("2 Explorer"));
+        assert!(output.contains("3 Report"));
+        assert!(output.contains("ignored: vendor"));
     }
 
     #[test]
