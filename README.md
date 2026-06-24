@@ -13,7 +13,7 @@ model and user experience.
 
 - Count source files, scripts, Markdown, and plain text documents.
 - Report total, code, comment, and blank lines.
-- Support human-readable, JSON, language breakdown, and TUI output.
+- Support human-readable, JSON, language breakdown, TUI output, and snapshot diffs.
 - Keep the core scanner reusable for CLI, TUI, and future desktop GUI frontends.
 
 ## Usage
@@ -30,6 +30,14 @@ Use ignore flags for one-off scans:
 ```powershell
 code-count . --ignore-blank
 code-count . --ignore-comments
+```
+
+Save scan snapshots and compare them:
+
+```powershell
+code-count history save . --output before.json
+code-count history save . --output after.json
+code-count diff before.json after.json
 ```
 
 ## Project config
@@ -76,7 +84,8 @@ directly.
 3. TUI dashboard using `ratatui` and `crossterm`.
 4. Explorer and report views.
 5. Project config with `code-count.toml`.
-6. Desktop GUI proof of concept.
+6. Scan history and diff between snapshots.
+7. Desktop GUI proof of concept.
 
 ## Development
 

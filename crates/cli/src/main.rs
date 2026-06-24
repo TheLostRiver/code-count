@@ -5,7 +5,10 @@ use std::{
 
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
-use code_count_core::{LanguageStat, ScanOptions, ScanReport, ScanSummary, scan_path};
+use code_count_core::{
+    LanguageDelta, LanguageStat, LineDelta, ScanOptions, ScanReport, ScanSummary, diff_reports,
+    scan_path,
+};
 use code_count_tui::{AppView, ReportFormat, TuiOptions};
 use serde::Deserialize;
 
@@ -38,6 +41,25 @@ enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    History {
+        #[command(subcommand)]
+        command: HistoryCommand,
+    },
+    Diff {
+        before: PathBuf,
+        after: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum HistoryCommand {
+    Save {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        #[arg(short, long)]
+        output: PathBuf,
+    },
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -64,13 +86,33 @@ struct TuiConfig {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    if let Some(Command::Tui { path }) = &cli.command {
-        ensure_path_exists(path)?;
-        let config = load_project_config(path)?;
-        let options = scan_options(&cli, &config);
-        let report = scan_path(path, &options);
-        let tui_options = tui_options(&config)?;
-        return code_count_tui::run_with_options(report, options, tui_options);
+    match &cli.command {
+        Some(Command::Tui { path }) => {
+            ensure_path_exists(path)?;
+            let config = load_project_config(path)?;
+            let options = scan_options(&cli, &config);
+            let report = scan_path(path, &options);
+            let tui_options = tui_options(&config)?;
+            return code_count_tui::run_with_options(report, options, tui_options);
+        }
+        Some(Command::History {
+            command: HistoryCommand::Save { path, output },
+        }) => {
+            ensure_path_exists(path)?;
+            let config = load_project_config(path)?;
+            let options = scan_options(&cli, &config);
+            let report = scan_path(path, &options);
+            save_snapshot(&report, output)?;
+            return Ok(());
+        }
+        Some(Command::Diff { before, after }) => {
+            let before_report = read_snapshot(before)?;
+            let after_report = read_snapshot(after)?;
+            let diff = diff_reports(&before_report, &after_report);
+            print_diff(&diff);
+            return Ok(());
+        }
+        None => {}
     }
 
     ensure_path_exists(&cli.path)?;
@@ -197,6 +239,24 @@ fn ensure_path_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn save_snapshot(report: &ScanReport, output: &Path) -> Result<()> {
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(output, serde_json::to_string_pretty(report)?)?;
+    println!("Saved snapshot: {}", output.display());
+    Ok(())
+}
+
+fn read_snapshot(path: &Path) -> Result<ScanReport> {
+    ensure_path_exists(path)?;
+    let contents = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&contents)?)
+}
+
 fn print_summary(summary: &ScanSummary) {
     println!("Root: {}", summary.root.display());
     println!("Files: {}", summary.files);
@@ -229,6 +289,57 @@ fn print_languages(report: &ScanReport) {
                 "Code"
             }
         );
+    }
+}
+
+fn print_diff(diff: &code_count_core::ScanReportDiff) {
+    println!("Scan diff");
+    println!("Before: {}", diff.before_root.display());
+    println!("After: {}", diff.after_root.display());
+    println!();
+    print_delta_summary(&diff.summary);
+
+    if !diff.languages.is_empty() {
+        println!();
+        println!("Languages:");
+        println!(
+            "{:<16} {:>8} {:>8} {:>8} {:>10} {:>10} {:>8}",
+            "Name", "Files", "Total", "Code", "Comments", "Documents", "Blank"
+        );
+
+        for language in &diff.languages {
+            print_language_delta(language);
+        }
+    }
+}
+
+fn print_delta_summary(delta: &LineDelta) {
+    println!("Files: {}", signed(delta.files));
+    println!("Total lines: {}", signed(delta.total_lines));
+    println!("Code lines: {}", signed(delta.code_lines));
+    println!("Comment lines: {}", signed(delta.comment_lines));
+    println!("Document lines: {}", signed(delta.document_lines));
+    println!("Blank lines: {}", signed(delta.blank_lines));
+}
+
+fn print_language_delta(language: &LanguageDelta) {
+    println!(
+        "{:<16} {:>8} {:>8} {:>8} {:>10} {:>10} {:>8}",
+        language.name,
+        signed(language.files),
+        signed(language.total_lines),
+        signed(language.code_lines),
+        signed(language.comment_lines),
+        signed(language.document_lines),
+        signed(language.blank_lines)
+    );
+}
+
+fn signed(value: isize) -> String {
+    if value > 0 {
+        format!("+{value}")
+    } else {
+        value.to_string()
     }
 }
 

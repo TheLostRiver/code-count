@@ -68,3 +68,76 @@ fn config_file_can_set_scan_defaults_and_ignored_paths() {
             .and(predicate::str::contains("Code lines: 3")),
     );
 }
+
+#[test]
+fn history_save_writes_snapshot_json() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let snapshot_path = temp_dir.path().join("snapshot.json");
+    fs::write(temp_dir.path().join("main.rs"), "fn main() {}\n").expect("write rust file");
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command
+        .arg("history")
+        .arg("save")
+        .arg(temp_dir.path())
+        .arg("--output")
+        .arg(&snapshot_path);
+
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Saved snapshot"));
+
+    let snapshot = fs::read_to_string(&snapshot_path).expect("read snapshot");
+    assert!(snapshot.contains("\"summary\""));
+    assert!(snapshot.contains("\"languages\""));
+    assert!(snapshot.contains("\"Rust\""));
+}
+
+#[test]
+fn diff_prints_summary_and_language_deltas_between_snapshots() {
+    let before_dir = tempfile::tempdir().expect("create before dir");
+    let after_dir = tempfile::tempdir().expect("create after dir");
+    let snapshot_dir = tempfile::tempdir().expect("create snapshot dir");
+    let before_snapshot = snapshot_dir.path().join("before.json");
+    let after_snapshot = snapshot_dir.path().join("after.json");
+
+    fs::write(before_dir.path().join("main.rs"), "fn main() {}\n").expect("write before rust");
+    fs::write(
+        after_dir.path().join("main.rs"),
+        "fn main() {\n    println!(\"hello\");\n}\n",
+    )
+    .expect("write after rust");
+
+    Command::cargo_bin("code-count")
+        .expect("binary exists")
+        .arg("history")
+        .arg("save")
+        .arg(before_dir.path())
+        .arg("--output")
+        .arg(&before_snapshot)
+        .assert()
+        .success();
+    Command::cargo_bin("code-count")
+        .expect("binary exists")
+        .arg("history")
+        .arg("save")
+        .arg(after_dir.path())
+        .arg("--output")
+        .arg(&after_snapshot)
+        .assert()
+        .success();
+
+    let mut command = Command::cargo_bin("code-count").expect("binary exists");
+    command
+        .arg("diff")
+        .arg(&before_snapshot)
+        .arg(&after_snapshot);
+
+    command.assert().success().stdout(
+        predicate::str::contains("Scan diff")
+            .and(predicate::str::contains("Code lines: +2"))
+            .and(predicate::str::contains("Rust"))
+            .and(predicate::str::contains("+2")),
+    );
+}
